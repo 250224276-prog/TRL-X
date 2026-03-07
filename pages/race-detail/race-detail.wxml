@@ -1,0 +1,89 @@
+<view class="container">
+  
+  <view class="custom-nav">
+    <view class="back-btn" bindtap="goBack"></view>
+    <text class="nav-title">比赛详细</text>
+  </view>
+
+  <view class="header-card">
+    <image class="race-cover" src="{{raceInfo.coverImg}}" mode="aspectFill"></image>
+    <view class="header-info">
+      <view class="info-top">
+        <text class="race-name">{{raceInfo.name}}</text>
+        <text class="race-date">{{raceInfo.date}}</text>
+      </view>
+      <view class="info-bottom">
+        <view class="itra-tag" wx:if="{{raceInfo.hasItra}}">ITRA认证</view>
+        <text class="race-location">{{raceInfo.location}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="distance-selector">
+    <block wx:for="{{raceInfo.groups}}" wx:key="index">
+      <view 
+        class="dist-btn {{currentGroupIndex === index ? 'active' : ''}}" 
+        style="color: {{item.themeColor}}; opacity: {{currentGroupIndex === index ? '1' : '0.3'}}"
+        bindtap="switchGroup" 
+        data-index="{{index}}"
+      >
+        {{item.dist}}
+      </view>
+    </block>
+  </view>
+
+  <view class="tab-switcher">
+    <text class="tab-item {{currentTab === 'detail' ? 'active' : ''}}" bindtap="switchTab" data-tab="detail">比赛详细</text>
+    <text class="tab-item {{currentTab === 'plan' ? 'active' : ''}}" bindtap="switchTab" data-tab="plan">制定计划</text>
+  </view>
+
+  <view class="content-detail" wx:if="{{currentTab === 'detail'}}">
+    <text class="section-title">关键数据</text>
+    <view class="key-data-card">
+      <view class="data-row">
+        <text class="data-label">发枪时间</text>
+        <text class="data-value" style="color: #FF9811">{{raceInfo.groups[currentGroupIndex].startTime}}</text>
+      </view>
+      <view class="data-row">
+        <text class="data-label">实际距离</text>
+        <text class="data-value" style="color: #36E153">{{raceInfo.groups[currentGroupIndex].actualDist}}</text>
+      </view>
+      <view class="data-row">
+        <text class="data-label">爬升下降</text>
+        <text class="data-value" style="color: #F6573B">{{raceInfo.groups[currentGroupIndex].elevation}}</text>
+      </view>
+      <view class="data-row border-none">
+        <text class="data-label">关门时间</text>
+        <text class="data-value" style="color: #3582FF">{{raceInfo.groups[currentGroupIndex].cutoffTime}}</text>
+      </view>
+    </view>
+
+    <text class="section-title">详细信息</text>
+    <image class="detail-map" src="{{raceInfo.groups[currentGroupIndex].detailMapImg}}" mode="widthFix"></image>
+  </view>
+
+  <view class="content-plan" wx:if="{{currentTab === 'plan'}}">
+    
+    <text class="section-title">预期完赛时间</text>
+    
+    <view class="time-input-card">
+      <view class="input-wrap">
+        <input type="number" placeholder="00" placeholder-class="ph-color" bindinput="inputHours" maxlength="2" />
+        <text class="unit">小时</text>
+      </view>
+      
+      <view class="divider">:</view>
+      
+      <view class="input-wrap">
+        <input type="number" placeholder="00" placeholder-class="ph-color" bindinput="inputMinutes" maxlength="2" />
+        <text class="unit">分钟</text>
+      </view>
+    </view>
+
+    <view class="bottom-area">
+      <view class="generate-btn" bindtap="generatePlan">生成专属计划</view>
+    </view>
+
+  </view>
+
+</view>

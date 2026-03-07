@@ -1,0 +1,121 @@
+/* 全局背景 */
+.container {
+  min-height: 100vh;
+  background-color: #000000;
+  padding: 0 40rpx 100rpx 40rpx;
+  box-sizing: border-box;
+  color: #FFFFFF;
+}
+
+/* 顶部自定义导航 */
+.custom-nav {
+  height: 180rpx;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 20rpx;
+  position: relative;
+}
+.back-btn {
+  width: 20rpx;
+  height: 20rpx;
+  border-bottom: 4rpx solid #FFFFFF;
+  border-left: 4rpx solid #FFFFFF;
+  transform: rotate(45deg);
+  margin-bottom: 10rpx;
+  padding: 10rpx;
+}
+.nav-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 36rpx;
+}
+
+/* 列表容器 */
+.list-container {
+  margin-top: 40rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 40rpx; /* 卡片之间的垂直间距 */
+}
+
+/* 卡片整体样式 */
+.race-card {
+  background: rgba(255, 255, 255, 0.11);
+  border-radius: 44rpx;
+  padding: 40rpx;
+  position: relative;
+  transition: all 0.2s ease;
+}
+.race-card:active {
+  transform: scale(0.98); /* 点击时的一点点缩放交互感 */
+  opacity: 0.8;
+}
+
+/* 卡片上半部分 */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10rpx;
+  position: relative;
+}
+.race-name {
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 34rpx;
+  color: #FF9811;
+  width: 70%;
+}
+.itra-tag {
+  font-size: 20rpx;
+  color: #FF9811;
+  font-weight: 500;
+  position: absolute;
+  right: 60rpx;
+  top: 8rpx;
+}
+.arrow-right {
+  width: 16rpx;
+  height: 16rpx;
+  border-top: 4rpx solid rgba(255,255,255,0.4);
+  border-right: 4rpx solid rgba(255,255,255,0.4);
+  transform: rotate(45deg);
+}
+.race-date {
+  font-size: 24rpx;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.6);
+  display: block;
+  margin-bottom: 40rpx;
+}
+
+/* 卡片下半部分 */
+.card-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  width: 50%;
+}
+.dist-tag {
+  font-size: 20rpx;
+  padding: 6rpx 20rpx;
+  border-radius: 20rpx;
+  border: 1rpx solid;
+  background: rgba(255, 255, 255, 0.05);
+}
+.race-location {
+  font-size: 20rpx;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: right;
+  line-height: 1.4;
+  width: 45%;
+}

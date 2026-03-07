@@ -1,0 +1,106 @@
+.container {
+  min-height: 100vh;
+  background-color: #000000;
+  padding: 0 40rpx 100rpx 40rpx;
+  box-sizing: border-box;
+  color: #FFFFFF;
+}
+
+/* 带有返回按钮的自定义导航 */
+.custom-nav {
+  height: 180rpx;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 20rpx;
+  position: relative;
+}
+.back-btn {
+  width: 20rpx;
+  height: 20rpx;
+  border-bottom: 4rpx solid #FFFFFF;
+  border-left: 4rpx solid #FFFFFF;
+  transform: rotate(45deg);
+  margin-bottom: 10rpx;
+  padding: 10rpx;
+  position: absolute;
+  left: 0;
+}
+.nav-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 36rpx;
+}
+
+.brand-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 60rpx;
+  margin-bottom: 80rpx;
+}
+.default-avatar {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 4rpx solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 30rpx;
+}
+.inner-circle { width: 60rpx; height: 60rpx; border-radius: 50%; background: rgba(255, 255, 255, 0.2); }
+.brand-title { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 44rpx; margin-bottom: 12rpx; letter-spacing: 2rpx; }
+.brand-subtitle { font-family: 'PingFang SC', sans-serif; font-size: 24rpx; color: rgba(255, 255, 255, 0.4); letter-spacing: 6rpx; }
+
+.auth-card {
+  background: rgba(255, 255, 255, 0.11);
+  border-radius: 56rpx;
+  padding: 60rpx 50rpx;
+}
+
+.auth-tabs {
+  display: flex;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 36rpx;
+  height: 80rpx;
+  margin-bottom: 60rpx;
+  padding: 6rpx;
+}
+.tab { flex: 1; display: flex; justify-content: center; align-items: center; font-size: 28rpx; font-weight: 500; color: rgba(255, 255, 255, 0.4); border-radius: 30rpx; transition: all 0.3s ease; }
+.tab.active { color: #FFFFFF; background: rgba(255, 255, 255, 0.15); font-weight: 600; }
+
+.input-box {
+  height: 110rpx;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 36rpx;
+  display: flex;
+  align-items: center;
+  padding: 0 40rpx;
+  margin-bottom: 30rpx;
+}
+.input-box input { flex: 1; color: #FFFFFF; font-size: 30rpx; font-family: 'Inter', sans-serif; }
+.ph-color { color: rgba(255, 255, 255, 0.25); }
+
+.submit-btn {
+  margin-top: 50rpx;
+  height: 110rpx;
+  background: #FF9811;
+  color: #000000;
+  font-family: 'PingFang HK', sans-serif;
+  font-size: 32rpx;
+  font-weight: 700;
+  border-radius: 55rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 10rpx 40rpx rgba(255, 152, 17, 0.2);
+  transition: all 0.2s ease;
+}
+.submit-btn:active { transform: scale(0.98); opacity: 0.9; }
+
+.forgot-pwd { margin-top: 40rpx; display: flex; justify-content: center; }
+.forgot-pwd text { font-size: 24rpx; color: rgba(255, 255, 255, 0.4); border-bottom: 2rpx solid rgba(255, 255, 255, 0.2); padding-bottom: 4rpx; }

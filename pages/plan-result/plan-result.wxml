@@ -1,0 +1,53 @@
+<view class="plan-page">
+  <view class="header">
+    <view class="back-btn" bindtap="goBack"><view class="arrow-left"></view></view>
+    <view class="title-box">
+      <view class="race-name">{{raceName}}</view>
+      <view class="total-time">计划总用时: {{targetHours}}h {{targetMinutes}}min</view>
+    </view>
+  </view>
+
+  <scroll-view class="plan-scroll" scroll-y>
+    <view class="cp-row" wx:for="{{checkpoints}}" wx:key="index">
+      <view class="click-mask" bindtap="goToSegmentDetail" data-index="{{index}}"></view>
+
+      <view class="cp-name-box">
+        <text class="cp-name">{{item.name}}</text>
+        <text class="dp-tag" wx:if="{{item.isDropBag}}">换装点</text>
+      </view>
+
+      <view class="ctrl-group pos-move" wx:if="{{index > 0}}" catchtap="return">
+        <text class="ctrl-label">计划用时(m)</text>
+        <view class="ctrl-box text-orange">
+          <input type="number" value="{{item.moveMins}}" data-index="{{index}}" data-type="move" bindblur="onManualUpdate" />
+        </view>
+      </view>
+
+      <view class="ctrl-group pos-rest" wx:if="{{index < checkpoints.length - 1}}" catchtap="return">
+        <text class="ctrl-label">休息(m)</text>
+        <view class="ctrl-box text-blue">
+          <input type="number" value="{{item.rest}}" data-index="{{index}}" data-type="rest" bindblur="onManualUpdate" />
+        </view>
+      </view>
+
+      <view class="vector-51"></view> 
+      
+      <view class="stats">
+        <view class="dist-val">{{item.segDist}}KM</view>
+        <view class="gain-loss">
+          <text class="val-up">+{{item.segGain}}</text>
+          <text class="val-down">-{{item.segLoss}}</text>
+        </view>
+      </view>
+
+      <view class="row-divider"></view>
+    </view>
+    
+    <view class="bottom-action-bar">
+      <view class="btn btn-save" bindtap="savePlanImage">保存计划表</view>
+      <view class="btn btn-sync" bindtap="syncToHardware">同步至手表</view>
+    </view>
+    
+    <view style="height: 80rpx;"></view> 
+  </scroll-view>
+</view>

@@ -1,0 +1,90 @@
+<view class="container">
+  
+  <block wx:if="{{!isConnected}}">
+    <view class="header-section" bindtap="goToConnect">
+      <text class="title-large">设备未连接</text>
+      <view class="arrow-right"></view>
+    </view>
+  </block>
+
+  <block wx:else>
+    <view class="header-section-connected" bindtap="goToConnect">
+      <view class="device-title-wrapper">
+        <text class="title-large connected-name">{{deviceName}}</text>
+        <view class="polygon-arrow"></view>
+      </view>
+      
+      <view class="status-tags">
+        <view class="status-pill">
+          <view class="icon-dot dot-blue"></view>
+          <text class="pill-text text-blue">已连接</text>
+        </view>
+        <view class="status-pill">
+          <view class="icon-dot dot-green"></view>
+          <text class="pill-text text-green">100%</text>
+        </view>
+        <view class="status-pill">
+          <view class="icon-dot dot-orange"></view>
+          <text class="pill-text text-orange">正常</text>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <view class="list-section">
+    <view class="section-header">
+      <text class="section-title">已导入的 比赛与计划</text>
+    </view>
+    <view class="empty-card">
+      <text class="empty-text">未导入 比赛与计划</text>
+    </view>
+  </view>
+
+  <view class="list-section">
+    <view class="section-header">
+      <text class="section-title">导入新的 比赛与计划</text>
+      <text class="view-more" bindtap="goToMore">查看更多</text>
+    </view>
+
+    <view class="race-list">
+      <block wx:for="{{raceList}}" wx:key="id">
+        <view class="race-card" bindtap="goToDetail" data-id="{{item.id}}">
+          
+          <view class="card-header">
+            <view class="name-group">
+              <text class="race-name">{{item.name}}</text>
+              <view class="itra-tag" wx:if="{{item.hasItra}}">ITRA</view>
+            </view>
+            <view class="arrow-right-small"></view>
+          </view>
+          
+          <text class="race-date">{{item.date}}</text>
+          
+          <text class="race-location">{{item.location}}</text>
+          
+          <view class="tag-container">
+            <block wx:for="{{item.tags}}" wx:for-item="tag" wx:key="index">
+              <view class="distance-tag">
+                <text class="distance-text" style="color: {{tag.color}}">{{tag.dist}}</text>
+              </view>
+            </block>
+          </view>
+
+        </view>
+      </block>
+    </view>
+  </view>
+
+  <view class="custom-tabbar">
+    <view class="tab-item active">
+      <image class="tab-icon" src="/images/我的产品 LOGO.png" mode="aspectFit"></image>
+      <text class="tab-text">我的产品</text>
+    </view>
+    
+    <view class="tab-item" bindtap="goToProfile">
+      <image class="tab-icon" src="/images/个人中心 LOGO-1.png" mode="aspectFit"></image>
+      <text class="tab-text">个人中心</text>
+    </view>
+  </view>
+
+</view>

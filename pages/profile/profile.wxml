@@ -1,0 +1,47 @@
+<view class="container">
+  
+  <view class="custom-nav">
+    <text class="nav-title">个人中心</text>
+  </view>
+
+  <view class="user-card" bindtap="handleCardClick">
+    <view class="avatar-box">
+      <view class="default-avatar"></view>
+    </view>
+    
+    <view class="user-info">
+      <text class="user-name">{{isLoggedIn ? userName : '未登录 / 注册'}}</text>
+      <text class="user-desc">{{isLoggedIn ? 'AST 硬核越野用户' : '点击登录以同步比赛与计划数据'}}</text>
+    </view>
+    
+    <view class="arrow-right"></view>
+  </view>
+
+  <view class="menu-list">
+    <view class="menu-item">
+      <text class="menu-text">我的设备</text>
+      <view class="arrow-right-small"></view>
+    </view>
+    <view class="menu-item">
+      <text class="menu-text">历史数据</text>
+      <view class="arrow-right-small"></view>
+    </view>
+    <view class="menu-item">
+      <text class="menu-text">系统设置</text>
+      <view class="arrow-right-small"></view>
+    </view>
+  </view>
+
+  <view class="custom-tabbar">
+    <view class="tab-item" bindtap="goToIndex">
+      <image class="tab-icon" src="/images/我的产品 LOGO-1.png" mode="aspectFit"></image>
+      <text class="tab-text">我的产品</text>
+    </view>
+    
+    <view class="tab-item active">
+      <image class="tab-icon" src="/images/个人中心 LOGO.png" mode="aspectFit"></image>
+      <text class="tab-text">个人中心</text>
+    </view>
+  </view>
+
+</view>

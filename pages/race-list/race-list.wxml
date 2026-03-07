@@ -1,0 +1,36 @@
+<view class="container">
+  
+  <view class="custom-nav">
+    <view class="back-btn" bindtap="goBack"></view>
+    <text class="nav-title">全部比赛</text>
+  </view>
+
+  <view class="list-container">
+    <block wx:for="{{raceList}}" wx:key="id">
+      
+      <view class="race-card" bindtap="goToDetail" data-id="{{item.id}}">
+        <view class="card-header">
+          <text class="race-name">{{item.name}}</text>
+          <view class="itra-tag" wx:if="{{item.hasItra}}">ITRA</view>
+          <view class="arrow-right"></view>
+        </view>
+        
+        <text class="race-date">{{item.date}}</text>
+        
+        <view class="card-bottom">
+          <view class="tags">
+            <block wx:for="{{item.tags}}" wx:for-item="tag" wx:key="dist">
+              <view class="dist-tag" style="color: {{tag.color}}; border-color: {{tag.color}}">
+                {{tag.dist}}
+              </view>
+            </block>
+          </view>
+          
+          <text class="race-location">{{item.location}}</text>
+        </view>
+      </view>
+
+    </block>
+  </view>
+
+</view>

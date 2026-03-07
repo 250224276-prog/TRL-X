@@ -1,0 +1,289 @@
+/* ========================================== */
+/* 全局背景 */
+/* ========================================== */
+.container {
+  min-height: 100vh;
+  background-color: #000000;
+  padding: 0 40rpx 200rpx 40rpx; /* 底部加大了留白，防止被悬浮按钮挡住 */
+  box-sizing: border-box;
+  color: #FFFFFF;
+}
+
+/* ========================================== */
+/* 1. 顶部自定义导航 */
+/* ========================================== */
+.custom-nav {
+  height: 180rpx; /* 留出手机状态栏的空间 */
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 20rpx;
+  position: relative;
+}
+.back-btn {
+  width: 20rpx;
+  height: 20rpx;
+  border-bottom: 4rpx solid #FFFFFF;
+  border-left: 4rpx solid #FFFFFF;
+  transform: rotate(45deg);
+  margin-bottom: 10rpx;
+  padding: 10rpx; /* 增加点击区域 */
+}
+.nav-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 36rpx;
+}
+
+/* ========================================== */
+/* 2. 顶部赛事信息卡片 */
+/* ========================================== */
+.header-card {
+  margin-top: 40rpx;
+  background: rgba(255, 255, 255, 0.11);
+  border-radius: 44rpx;
+  padding: 30rpx;
+  display: flex;
+  gap: 30rpx;
+}
+.race-cover {
+  width: 220rpx;
+  height: 220rpx;
+  border-radius: 28rpx;
+  background: rgba(255, 255, 255, 0.2); /* 占位色 */
+}
+.header-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.info-top {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+.race-date {
+  font-size: 24rpx;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: left;
+}
+.race-name {
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 36rpx;
+  color: #FF9811;
+}
+.info-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+.itra-tag {
+  font-size: 20rpx;
+  color: #FF9811;
+  font-weight: 500;
+}
+.race-location {
+  font-size: 20rpx;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.4;
+}
+
+/* ========================================== */
+/* 3. 公里数选择器 (大灰框底座 + 胶囊按钮) */
+/* ========================================== */
+.distance-selector {
+  margin-top: 40rpx;
+  width: 600rpx; /* 对应 Figma 的 300px */
+  height: 64rpx; /* 对应 Figma 的 32px */
+  background: rgba(255, 255, 255, 0.1); /* 一直存在的大灰框底座 */
+  border-radius: 32rpx; /* 对应 Figma 的 16px 大圆角 */
+  display: flex;
+  align-items: center;
+}
+
+.dist-btn {
+  flex: 1; 
+  height: 100%; 
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: 'PingFang SC', sans-serif;
+  font-size: 32rpx; 
+  font-weight: 500;
+  border-radius: 32rpx; 
+  transition: all 0.3s ease;
+}
+
+.dist-btn.active {
+  background: rgba(255, 255, 255, 0.15); /* 选中时出现的高亮胶囊色块 */
+}
+
+/* ========================================== */
+/* 4. Tab 切换 (比赛详细 / 制定计划) */
+/* ========================================== */
+.tab-switcher {
+  margin-top: 30rpx;
+  width: 400rpx; 
+  height: 64rpx; 
+  background: rgba(255, 255, 255, 0.1); 
+  border-radius: 32rpx; 
+  display: flex;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+
+.tab-item {
+  flex: 1; 
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: 'Hiragino Sans GB', sans-serif;
+  font-size: 30rpx; 
+  font-weight: 600;
+  color: #FFFFFF;
+  opacity: 0.5;
+  border-radius: 32rpx; 
+  transition: all 0.3s ease;
+}
+
+.tab-item.active {
+  opacity: 1; 
+  background: rgba(255, 255, 255, 0.15); 
+}
+
+/* ========================================== */
+/* 5. 内容区：比赛详细 */
+/* ========================================== */
+.content-detail {
+  margin-top: 40rpx;
+}
+.section-title {
+  font-family: 'Hiragino Sans GB', sans-serif;
+  font-size: 36rpx;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 30rpx;
+}
+
+/* 关键数据卡片 */
+.key-data-card {
+  background: rgba(255, 255, 255, 0.11);
+  border-radius: 44rpx;
+  padding: 20rpx 40rpx;
+  margin-bottom: 60rpx;
+}
+.data-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 30rpx 0;
+  border-bottom: 1rpx solid rgba(255, 255, 255, 0.2); 
+}
+.data-row.border-none {
+  border-bottom: none; 
+}
+.data-label {
+  font-size: 30rpx;
+  font-weight: 600;
+}
+.data-value {
+  font-size: 32rpx;
+  font-weight: 500;
+}
+
+/* 详细地图图片 */
+.detail-map {
+  width: 100%;
+  border-radius: 44rpx;
+  background: rgba(255, 255, 255, 0.1);
+  margin-bottom: 50rpx;
+}
+
+/* ========================================== */
+/* 6. 内容区：制定计划 (新增的样式在这里！) */
+/* ========================================== */
+.content-plan {
+  margin-top: 40rpx;
+  min-height: 500rpx;
+}
+
+/* 时间输入卡片 */
+.time-input-card {
+  background: rgba(255, 255, 255, 0.11);
+  border-radius: 44rpx;
+  padding: 60rpx 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 120rpx; /* 给底部悬浮按钮留点空间 */
+}
+.input-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+}
+.input-wrap input {
+  width: 160rpx;
+  height: 140rpx;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 28rpx;
+  text-align: center;
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 60rpx;
+  color: #FFFFFF;
+}
+.ph-color {
+  color: rgba(255, 255, 255, 0.2);
+}
+.unit {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.5);
+}
+.divider {
+  font-family: 'Inter', sans-serif;
+  font-size: 50rpx;
+  color: rgba(255, 255, 255, 0.3);
+  margin: 0 40rpx;
+  margin-top: -50rpx; /* 微调冒号位置 */
+}
+
+/* 底部悬浮按钮 */
+.bottom-area {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  padding: 40rpx;
+  background: linear-gradient(to top, rgba(0,0,0,1) 60%, rgba(0,0,0,0));
+  box-sizing: border-box;
+  z-index: 10;
+}
+.generate-btn {
+  width: 100%;
+  height: 110rpx;
+  background: #FF9811;
+  color: #000000;
+  font-family: 'PingFang HK', sans-serif;
+  font-size: 32rpx;
+  font-weight: 700;
+  border-radius: 55rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 10rpx 40rpx rgba(255, 152, 17, 0.2);
+  transition: all 0.2s ease;
+}
+.generate-btn:active {
+  transform: scale(0.98);
+  opacity: 0.9;
+}

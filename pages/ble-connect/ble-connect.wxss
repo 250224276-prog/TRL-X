@@ -1,0 +1,198 @@
+/* 全局基础 */
+.container {
+  min-height: 100vh;
+  background-color: #000000;
+  padding: 0 40rpx 100rpx 40rpx;
+  box-sizing: border-box;
+  color: #FFFFFF;
+}
+
+.custom-nav {
+  height: 180rpx;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 20rpx;
+  position: relative;
+}
+.back-btn {
+  width: 20rpx;
+  height: 20rpx;
+  border-bottom: 4rpx solid #FFFFFF;
+  border-left: 4rpx solid #FFFFFF;
+  transform: rotate(45deg);
+  margin-bottom: 10rpx;
+  padding: 10rpx;
+}
+.nav-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 36rpx;
+}
+
+/* ========================================== */
+/* 雷达动画扫描区 */
+/* ========================================== */
+.radar-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 80rpx;
+  margin-bottom: 80rpx;
+}
+
+.radar-animation {
+  position: relative;
+  width: 240rpx;
+  height: 240rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 50rpx;
+}
+
+/* 中心的手表假图标 */
+.watch-center-icon {
+  width: 80rpx;
+  height: 100rpx;
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  z-index: 10;
+}
+
+/* 向外扩散的呼吸波纹 */
+.circle-1, .circle-2 {
+  position: absolute;
+  width: 80rpx;
+  height: 80rpx;
+  background: rgba(255, 152, 17, 0.4); /* 品牌橙色的半透明波纹 */
+  border-radius: 50%;
+  z-index: 1;
+  opacity: 0;
+}
+
+/* 呼吸灯动画效果 */
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(3.5); opacity: 0; }
+}
+
+.pulsing {
+  animation: pulse 2s infinite cubic-bezier(0.15, 0.6, 0.6, 1);
+}
+.pulsing-delay {
+  animation: pulse 2s infinite cubic-bezier(0.15, 0.6, 0.6, 1);
+  animation-delay: 1s; /* 第二层波纹延迟扩散 */
+}
+
+.status-title {
+  font-family: 'Hiragino Sans GB', sans-serif;
+  font-size: 34rpx;
+  font-weight: 600;
+  margin-bottom: 16rpx;
+}
+.status-sub {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* ========================================== */
+/* 设备列表区 */
+/* ========================================== */
+.list-section {
+  width: 100%;
+}
+.section-title {
+  font-family: 'Hiragino Sans GB', sans-serif;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  display: block;
+  margin-bottom: 30rpx;
+}
+
+.device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.device-card {
+  background: rgba(255, 255, 255, 0.11);
+  border-radius: 36rpx;
+  padding: 30rpx 40rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+.device-card:active {
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(0.98);
+}
+
+.device-info {
+  display: flex;
+  align-items: center;
+  gap: 30rpx;
+}
+
+.device-icon {
+  width: 40rpx;
+  height: 50rpx;
+  border: 4rpx solid rgba(255, 255, 255, 0.8);
+  border-radius: 8rpx;
+}
+
+.text-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.device-name {
+  font-family: 'Inter', sans-serif;
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+.device-mac {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'Inter', sans-serif;
+}
+
+/* 右侧连接按钮与信号 */
+.action-group {
+  display: flex;
+  align-items: center;
+  gap: 30rpx;
+}
+
+.signal-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6rpx;
+  height: 24rpx;
+}
+.signal-bars .bar {
+  width: 6rpx;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4rpx;
+}
+.signal-bars .bar:nth-child(1) { height: 12rpx; }
+.signal-bars .bar:nth-child(2) { height: 18rpx; }
+.signal-bars .bar:nth-child(3) { height: 24rpx; }
+.signal-bars .bar.active { background: #36E153; /* 信号良好变绿 */ }
+
+.connect-btn {
+  background: #FF9811;
+  color: #000000;
+  font-size: 26rpx;
+  font-weight: 600;
+  padding: 12rpx 30rpx;
+  border-radius: 32rpx;
+}
