@@ -20,6 +20,7 @@ Page({
     restIndex: 4, 
     globalRestMins: 5,
     checkpoints: [],
+    blePlanPayload: null,
     K: 1.07,
     showDetail: false,
     detailCurrent: 0,
@@ -442,6 +443,255 @@ Page({
     return `${hh}:${mm}${days > 0 ? ` (+${days})` : ''}`;
   },
 
+  getRaceDateParts(dateStr = this.data.raceDate) {
+    const nums = (dateStr || '').match(/\d+/g);
+    if (!nums || nums.length < 3) return null;
+
+    const year = Number(nums[0]);
+    const month = Number(nums[1]);
+    const day = Number(nums[2]);
+
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+      return null;
+    }
+
+    return { year, month, day };
+  },
+
+  formatBeijingDateTime(absoluteMinutes, raceDate = this.data.raceDate) {
+    if (!Number.isFinite(absoluteMinutes)) return '';
+
+    const parts = this.getRaceDateParts(raceDate);
+    if (!parts) return '';
+
+    const utcMsAtBeijingMidnight =
+      Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0) - (8 * 60 * 60 * 1000);
+    const utcMs = utcMsAtBeijingMidnight + (Math.round(absoluteMinutes) * 60 * 1000);
+    const beijingDate = new Date(utcMs + (8 * 60 * 60 * 1000));
+
+    const yyyy = beijingDate.getUTCFullYear();
+    const mm = String(beijingDate.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(beijingDate.getUTCDate()).padStart(2, '0');
+    const hh = String(beijingDate.getUTCHours()).padStart(2, '0');
+    const mi = String(beijingDate.getUTCMinutes()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+  },
+
+  getBleSegmentName(cp, index) {
+    const cpNum = (cp.cpNum || `CP${index + 1}`).trim();
+    const locName = (cp.locName || '').trim();
+    const rawName = (cp.name || '').trim();
+
+    if (cpNum && locName) return `${cpNum} - ${locName}`;
+    if (rawName) return rawName;
+    return cpNum;
+  },
+
+  getBleCutoffTimeBjt(cp, raceDate = this.data.raceDate) {
+    if (Number.isFinite(cp.absoluteCutoffMins)) {
+      return this.formatBeijingDateTime(cp.absoluteCutoffMins, raceDate);
+    }
+
+    if (!cp.cutoffTime || cp.cutoffTime === '--:--') {
+      return '';
+    }
+
+    const [h, m] = cp.cutoffTime.split(':').map(Number);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) {
+      return '';
+    }
+
+    return this.formatBeijingDateTime((h * 60) + m, raceDate);
+  },
+
+  saveLocalPlanSnapshot(checkpoints = this.data.checkpoints) {
+    const snapshot = {
+      raceId: this.data.raceId || '',
+      raceDate: this.data.raceDate || '',
+      raceName: this.data.raceName || '',
+      groupDist: this.data.groupDist || '',
+      startTime: this.data.startTime || '07:00',
+      targetHours: this.data.targetHours,
+      targetMinutes: this.data.targetMinutes,
+      checkpoints: (Array.isArray(checkpoints) ? checkpoints : []).map(cp => ({ ...cp }))
+    };
+
+    this.localPlanSnapshot = snapshot;
+    return snapshot;
+  },
+
+  getBleSourcePlan(sourcePlan = null) {
+    if (sourcePlan && Array.isArray(sourcePlan.checkpoints)) {
+      return sourcePlan;
+    }
+
+    if (this.localPlanSnapshot && Array.isArray(this.localPlanSnapshot.checkpoints)) {
+      return this.localPlanSnapshot;
+    }
+
+    return this.saveLocalPlanSnapshot(this.data.checkpoints);
+  },
+
+  buildBlePlanPayload(sourcePlan = null) {
+    const plan = this.getBleSourcePlan(sourcePlan);
+    const segments = (Array.isArray(plan.checkpoints) ? plan.checkpoints : [])
+      .slice(1)
+      .map((cp, index) => ({
+        segmentIndex: index + 1,
+        segmentName: this.getBleSegmentName(cp, index),
+        arrivalTimeBjt: this.formatBeijingDateTime(cp.arrAbsoluteMins, plan.raceDate),
+        cutoffTimeBjt: this.getBleCutoffTimeBjt(cp, plan.raceDate),
+        restMin: parseInt(cp.rest, 10) || 0
+      }));
+
+    const payload = {
+      ver: 2,
+      raceDate: plan.raceDate || '',
+      raceName: plan.raceName || '',
+      segmentCount: segments.length,
+      segments
+    };
+
+    this.localPlanSnapshot = plan;
+    this.blePlanPayload = payload;
+    return payload;
+  },
+
+  isBleDateTimeString(value) {
+    if (typeof value !== 'string') return false;
+
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/);
+    if (!match) return false;
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const hour = Number(match[4]);
+    const minute = Number(match[5]);
+
+    if (
+      !Number.isFinite(year) ||
+      !Number.isFinite(month) ||
+      !Number.isFinite(day) ||
+      !Number.isFinite(hour) ||
+      !Number.isFinite(minute)
+    ) {
+      return false;
+    }
+
+    if (month < 1 || month > 12 || day < 1 || day > 31 || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return false;
+    }
+
+    const date = new Date(Date.UTC(year, month - 1, day, hour, minute));
+    return (
+      date.getUTCFullYear() === year &&
+      (date.getUTCMonth() + 1) === month &&
+      date.getUTCDate() === day &&
+      date.getUTCHours() === hour &&
+      date.getUTCMinutes() === minute
+    );
+  },
+
+  validateBlePlanPayload(payload = this.blePlanPayload) {
+    const errors = [];
+
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return {
+        valid: false,
+        errors: ['payload 必须是一个对象'],
+        payload
+      };
+    }
+
+    if (payload.ver !== 2) {
+      errors.push('payload.ver 必须为 2');
+    }
+
+    if (typeof payload.raceDate !== 'string' || !payload.raceDate.trim()) {
+      errors.push('payload.raceDate 不能为空');
+    }
+
+    if (typeof payload.raceName !== 'string' || !payload.raceName.trim()) {
+      errors.push('payload.raceName 不能为空');
+    }
+
+    if (!Number.isInteger(payload.segmentCount) || payload.segmentCount < 0) {
+      errors.push('payload.segmentCount 必须是非负整数');
+    }
+
+    if (!Array.isArray(payload.segments)) {
+      errors.push('payload.segments 必须是数组');
+    } else if (payload.segments.length !== payload.segmentCount) {
+      errors.push('payload.segmentCount 与 payload.segments.length 不一致');
+    }
+
+    if (Array.isArray(payload.segments)) {
+      payload.segments.forEach((segment, index) => {
+        const label = `segments[${index}]`;
+
+        if (!segment || typeof segment !== 'object' || Array.isArray(segment)) {
+          errors.push(`${label} 必须是对象`);
+          return;
+        }
+
+        if (segment.segmentIndex !== index + 1) {
+          errors.push(`${label}.segmentIndex 应为 ${index + 1}`);
+        }
+
+        if (typeof segment.segmentName !== 'string' || !segment.segmentName.trim()) {
+          errors.push(`${label}.segmentName 不能为空`);
+        }
+
+        if (!this.isBleDateTimeString(segment.arrivalTimeBjt)) {
+          errors.push(`${label}.arrivalTimeBjt 格式必须为 YYYY-MM-DD HH:mm`);
+        }
+
+        if (segment.cutoffTimeBjt !== '' && !this.isBleDateTimeString(segment.cutoffTimeBjt)) {
+          errors.push(`${label}.cutoffTimeBjt 必须为空字符串或 YYYY-MM-DD HH:mm`);
+        }
+
+        if (!Number.isInteger(segment.restMin) || segment.restMin < 0) {
+          errors.push(`${label}.restMin 必须是非负整数`);
+        }
+      });
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      payload
+    };
+  },
+
+  testBlePlanPayload(showModal = true) {
+    const localPlanSnapshot = this.saveLocalPlanSnapshot(this.data.checkpoints);
+    const payload = this.buildBlePlanPayload(localPlanSnapshot);
+    const result = this.validateBlePlanPayload(payload);
+
+    this.lastBlePayloadTestResult = result;
+    console.log('[BLE Payload Test] payload =', payload);
+    console.log('[BLE Payload Test] result =', result);
+
+    if (showModal && typeof wx !== 'undefined' && wx.showModal) {
+      if (result.valid) {
+        wx.showModal({
+          title: 'BLE 载荷校验通过',
+          content: `共 ${payload.segmentCount} 段，数据格式正确，可进入发送流程。`,
+          showCancel: false
+        });
+      } else {
+        wx.showModal({
+          title: 'BLE 载荷校验失败',
+          content: result.errors.slice(0, 8).join('\n'),
+          showCancel: false
+        });
+      }
+    }
+
+    return result;
+  },
+
   updateTimesAndPaces(updateTotals = false) {
     let { checkpoints, startTime } = this.data;
     let [startH, startM] = startTime.split(':').map(Number);
@@ -452,6 +702,8 @@ Page({
 
     const newCps = checkpoints.map((cp, i, arr) => {
       if (i === 0) {
+        cp.arrAbsoluteMins = currentMinutes;
+        cp.depAbsoluteMins = currentMinutes;
         cp.arrTime = this.formatTime(currentMinutes);
         cp.depTime = this.formatTime(currentMinutes);
         cp.pace = "-'--\""; cp.eqPace = "-'--\""; cp.eqDist = "0.00";
@@ -461,6 +713,7 @@ Page({
       }
 
       currentMinutes += cp.moveMins;
+      cp.arrAbsoluteMins = currentMinutes;
       cp.arrTime = this.formatTime(currentMinutes); 
       
       if (cp.cutoffTime && cp.cutoffTime !== '--:--') {
@@ -475,15 +728,20 @@ Page({
 
         cp.displayCutoffTime = this.formatTime(cMins); 
       } else {
+        cp.absoluteCutoffMins = null;
         cp.displayCutoffTime = '--:--';
       }
 
-      cp.isOvertime = cp.absoluteCutoffMins ? (currentMinutes > cp.absoluteCutoffMins) : false;
+      cp.isOvertime = Number.isFinite(cp.absoluteCutoffMins)
+        ? (currentMinutes > cp.absoluteCutoffMins)
+        : false;
 
       if (i < arr.length - 1) {
         currentMinutes += cp.rest;
+        cp.depAbsoluteMins = currentMinutes;
         cp.depTime = this.formatTime(currentMinutes);
       } else {
+        cp.depAbsoluteMins = cp.arrAbsoluteMins;
         cp.depTime = cp.arrTime;
       }
 
@@ -501,6 +759,8 @@ Page({
       updatePayload.targetHours = Math.floor(totalMinsForGlobal / 60);
       updatePayload.targetMinutes = totalMinsForGlobal % 60;
     }
+    const localPlanSnapshot = this.saveLocalPlanSnapshot(newCps);
+    updatePayload.blePlanPayload = this.buildBlePlanPayload(localPlanSnapshot);
     this.setData(updatePayload);
   },
 
@@ -746,7 +1006,17 @@ Page({
   async uploadPlanToCloud() {
     wx.showLoading({ title: '安全加密上传中...', mask: true });
     
-    const { raceId, raceName, groupDist, raceDate, startTime, targetHours, targetMinutes, checkpoints } = this.data;
+    const localPlanSnapshot = this.saveLocalPlanSnapshot(this.data.checkpoints);
+    const {
+      raceId,
+      raceName,
+      groupDist,
+      raceDate,
+      startTime,
+      targetHours,
+      targetMinutes,
+      checkpoints
+    } = localPlanSnapshot;
 
     let raceDateMs = 0;
     if (raceDate) {
@@ -816,8 +1086,12 @@ Page({
   },
 
   async executeSyncAnimation() {
+    let payloadForBleLog = null;
     const success = await this.uploadPlanToCloud();
     if (!success) return; 
+    payloadForBleLog = this.buildBlePlanPayload();
+    console.log('[BLE Send] payload object =', payloadForBleLog);
+    console.log('[BLE Send] payload json =', JSON.stringify(payloadForBleLog));
 
     wx.showLoading({ title: '正在打包路书...', mask: true });
     
