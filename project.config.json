@@ -25,7 +25,7 @@
       "outputPath": ""
     }
   },
-  "appid": "touristappid",
+  "appid": "wx4bb1c2c6c6358eda",
   "projectname": "AST-SYSTEM",
   "compileType": "miniprogram",
   "simulatorPluginLibVersion": {},
@@ -33,5 +33,6 @@
     "ignore": [],
     "include": []
   },
-  "editorSetting": {}
+  "editorSetting": {},
+  "libVersion": "3.11.1"
 }

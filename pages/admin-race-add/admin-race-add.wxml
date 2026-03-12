@@ -1,0 +1,106 @@
+<view class="admin-page">
+  <scroll-view class="form-scroll" scroll-y>
+    
+    <view class="header-titles">
+      <view style="display: flex; justify-content: space-between; align-items: center;">
+        <text class="main-title">AST 控制台</text>
+        <view class="history-btn" bindtap="goToRaceList" wx:if="{{mode === 'create'}}">历史赛事库</view>
+      </view>
+      <text class="sub-title">多组别并发全自动上新系统</text>
+    </view>
+
+    <view class="section-header"><text>全局赛事档案</text></view>
+    <view class="global-card">
+      <view class="input-group">
+        <text class="label">赛事名称 (必填)</text>
+        <input class="input-field" placeholder="例如：2026 莫干山越野赛" model:value="{{raceName}}" />
+      </view>
+      <view class="input-row">
+        <view class="input-group half">
+          <text class="label">比赛日期 (必填)</text>
+          <picker mode="date" value="{{raceDate}}" bindchange="onDateChange">
+            <view class="picker-field {{raceDate ? 'active' : ''}}">{{raceDate || '选择日期'}}</view>
+          </picker>
+        </view>
+        <view class="input-group half">
+          <text class="label">举办地点</text>
+          <input class="input-field" placeholder="例如：浙江 湖州" model:value="{{location}}" />
+        </view>
+      </view>
+      <view class="input-row" style="align-items: center;">
+        <view class="input-group half switch-group">
+          <text class="label" style="margin-bottom:0;">ITRA 认证</text>
+          <switch color="#FF9811" checked="{{hasItra}}" bindchange="onItraChange"/>
+        </view>
+        <view class="input-group half" bindtap="chooseCoverImg">
+          <text class="label">赛事主封面</text>
+          <view class="upload-btn {{coverImgPath ? 'uploaded' : ''}}">{{coverImgPath ? '✅ 已选择' : '+ 上传图片'}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="section-header" style="margin-top:60rpx;">
+      <text>赛道组别参数 (Groups)</text>
+    </view>
+    
+    <block wx:for="{{groups}}" wx:key="index">
+      <view class="group-card">
+        <view class="group-card-header">
+          <text class="g-title">组别 #{{index + 1}}</text>
+          <view class="g-delete" bindtap="removeGroup" data-index="{{index}}" wx:if="{{groups.length > 1}}">删除</view>
+        </view>
+
+        <view class="input-row">
+          <view class="input-group half">
+            <text class="label">简称 (如: 50km)</text>
+            <input class="input-field" placeholder="用于标签" value="{{item.dist}}" bindinput="onGroupInput" data-index="{{index}}" data-field="dist" />
+          </view>
+          <view class="input-group half">
+            <text class="label">关门时间</text>
+            <input class="input-field" placeholder="如: 14小时" value="{{item.cutoffTime}}" bindinput="onGroupInput" data-index="{{index}}" data-field="cutoffTime" />
+          </view>
+        </view>
+
+        <view class="input-row">
+          <view class="input-group half">
+            <text class="label">第一发枪时间</text>
+            <picker mode="time" value="{{item.startTime1}}" bindchange="onGroupInput" data-index="{{index}}" data-field="startTime1">
+              <view class="picker-field active">{{item.startTime1}}</view>
+            </picker>
+          </view>
+          <view class="input-group half">
+            <text class="label">第二发枪(选填)</text>
+            <picker mode="time" value="{{item.startTime2}}" bindchange="onGroupInput" data-index="{{index}}" data-field="startTime2">
+              <view class="picker-field {{item.startTime2 ? 'active' : ''}}">{{item.startTime2 || '无'}}</view>
+            </picker>
+          </view>
+        </view>
+
+        <view class="input-row">
+          <view class="input-group half">
+            <text class="label">主题色系</text>
+            <picker mode="selector" range="{{colorNames}}" value="{{item.themeColorIndex}}" bindchange="onGroupInput" data-index="{{index}}" data-field="themeColorIndex">
+              <view class="picker-field active" style="color:{{colorList[item.themeColorIndex]}}">{{colorNames[item.themeColorIndex]}}</view>
+            </picker>
+          </view>
+          <view class="input-group half" bindtap="chooseGroupMap" data-index="{{index}}">
+            <text class="label">组别路线图(选填)</text>
+            <view class="upload-btn {{item.detailMapPath ? 'uploaded' : ''}}">{{item.detailMapPath ? '✅ 已选择' : '+ 上传地图'}}</view>
+          </view>
+        </view>
+
+        <view class="gpx-box" bindtap="chooseGroupGpx" data-index="{{index}}">
+          <text class="gpx-txt {{item.gpxFilePath ? 'active' : ''}}">{{item.gpxFileName || '+ 点击载入此组别的 GPX 轨迹文件'}}</text>
+        </view>
+      </view>
+    </block>
+
+    <view class="add-group-btn" bindtap="addGroup">+ 新增赛道组别</view>
+
+    <view style="height: 100rpx;"></view>
+  </scroll-view>
+
+  <view class="bottom-action">
+    <view class="submit-btn" bindtap="submitAndIgnite">{{mode === 'edit' ? '保存修改并点火 🚀' : '全矩阵上传并点火 🚀'}}</view>
+  </view>
+</view>

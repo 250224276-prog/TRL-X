@@ -42,7 +42,7 @@
     <view class="key-data-card">
       <view class="data-row">
         <text class="data-label">发枪时间</text>
-        <text class="data-value" style="color: #FF9811">{{raceInfo.groups[currentGroupIndex].startTime}}</text>
+        <text class="data-value" style="color: #FF9811">{{raceInfo.groups[currentGroupIndex].startTime}}<block wx:if="{{raceInfo.groups[currentGroupIndex].startTime2}}"> / {{raceInfo.groups[currentGroupIndex].startTime2}}</block></text>
       </view>
       <view class="data-row">
         <text class="data-label">实际距离</text>
@@ -77,6 +77,20 @@
       <view class="input-wrap">
         <input type="number" placeholder="00" placeholder-class="ph-color" bindinput="inputMinutes" maxlength="2" />
         <text class="unit">分钟</text>
+      </view>
+    </view>
+
+    <text class="section-title" style="margin-top: 50rpx;">发枪批次</text>
+    <view class="capsule-container">
+      <view class="capsule-item {{selectedStartTimeIndex === 0 ? 'active' : ''}}" 
+            bindtap="selectStartTime" data-index="{{0}}">
+        <text>{{raceInfo.groups[currentGroupIndex].startTime || '07:00'}}</text>
+      </view>
+      
+      <view class="capsule-item {{selectedStartTimeIndex === 1 ? 'active' : ''}}" 
+            wx:if="{{raceInfo.groups[currentGroupIndex].startTime2}}"
+            bindtap="selectStartTime" data-index="{{1}}">
+        <text>{{raceInfo.groups[currentGroupIndex].startTime2}}</text>
       </view>
     </view>
 

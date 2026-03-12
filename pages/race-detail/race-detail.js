@@ -1,6 +1,7 @@
 // pages/race-detail/race-detail.js
 // 获取全局云端数据库引用
 const db = wx.cloud.database();
+const _ = db.command; // 引入查询指令
 
 Page({
   data: {
@@ -9,7 +10,9 @@ Page({
     raceInfo: null, 
     // 记录用户输入的时间
     targetHours: '',
-    targetMinutes: ''
+    targetMinutes: '',
+    // 记录当前选中的是哪一个发枪时间（0 = 左边，1 = 右边）
+    selectedStartTimeIndex: 0
   },
 
   // 页面加载时，去云端查找对应的比赛数据
@@ -19,10 +22,11 @@ Page({
 
     wx.showLoading({ title: '加载详情中...', mask: true });
 
-    // 去云端数据库 races 集合里，精准查找 id 匹配的那一条
-    db.collection('races').where({
-      id: targetId
-    }).get({
+    // 隐藏升级：双兼容查询！无论是老数据的 id，还是新上新的 _id，都能精准命中！
+    db.collection('races').where(_.or([
+      { id: targetId },
+      { _id: targetId }
+    ])).get({
       success: res => {
         wx.hideLoading();
         // 如果云端返回了数据数组，并且里面有值
@@ -30,7 +34,8 @@ Page({
           console.log("☁️ 详情页获取云端数据成功：", res.data[0]);
           this.setData({
             raceInfo: res.data[0], // 取出匹配到的第一场比赛并渲染
-            currentGroupIndex: 0 
+            currentGroupIndex: 0,
+            selectedStartTimeIndex: 0 // 初始化为0
           });
         } else {
           console.error("糟了，云端没找到对应的赛事数据！");
@@ -56,7 +61,16 @@ Page({
 
   switchGroup(e) {
     const index = e.currentTarget.dataset.index;
-    this.setData({ currentGroupIndex: index });
+    this.setData({ 
+      currentGroupIndex: index,
+      selectedStartTimeIndex: 0 // 切换距离组别时，自动重置发枪时间为第一发
+    });
+  },
+
+  // 点击发枪胶囊时的切换逻辑
+  selectStartTime(e) {
+    const index = e.currentTarget.dataset.index;
+    this.setData({ selectedStartTimeIndex: index });
   },
 
   inputHours(e) {
@@ -67,9 +81,9 @@ Page({
     this.setData({ targetMinutes: e.detail.value });
   },
 
-  // ✨ 极速版核心修改：不再呼叫云端引擎，直接从 raceInfo 里提取已存好的 CP 点数据
+  // 生成计划触发器
   generatePlan() {
-    const { targetHours, targetMinutes, raceInfo, currentGroupIndex } = this.data;
+    const { targetHours, targetMinutes, raceInfo, currentGroupIndex, selectedStartTimeIndex } = this.data;
     
     if (!targetHours && !targetMinutes) {
       wx.showToast({ title: '请输入完赛时间', icon: 'none' });
@@ -78,34 +92,52 @@ Page({
 
     if (!raceInfo || !raceInfo.groups || raceInfo.groups.length === 0) return;
 
-    // 获取当前选中的组别数据（比如 12km 或 168km）
+    // 获取当前选中的组别数据
     const currentGroup = raceInfo.groups[currentGroupIndex];
 
-    // 🚨 关键拦截：检查数据库里这个组别到底有没有存入解析好的 checkpoints 数据？
+    // 🚨 关键拦截：检查是否有轨迹数据
     if (!currentGroup.checkpoints || currentGroup.checkpoints.length === 0) {
       wx.showToast({ title: '该组别暂无轨迹数据', icon: 'none' });
       return;
     }
 
-    // 处理空值
+    // 极简逻辑：直接根据用户的胶囊选中状态读取对应的发枪时间
+    const selectedTime = selectedStartTimeIndex === 0 ? currentGroup.startTime : currentGroup.startTime2;
+    // 如果出错了兜底用 07:00
+    this.executeJump(selectedTime || currentGroup.startTime || '07:00');
+  },
+
+  // 🚀 专门负责携带数据跃迁的核心方法
+  executeJump(selectedStartTime) {
+    const { targetHours, targetMinutes, raceInfo, currentGroupIndex } = this.data;
+    const currentGroup = raceInfo.groups[currentGroupIndex];
+    
     const h = targetHours || '0';
     const m = targetMinutes || '0';
 
-    // 假装思考 300 毫秒，给用户一个“引擎正在启动”的丝滑心理暗示
     wx.showLoading({ title: '极速生成中...', mask: true });
 
     setTimeout(() => {
       wx.hideLoading();
 
-      // 组装数据包裹，伪装成之前 V8 引擎吐出来的格式
+      // 📦 超级包裹：把真实距离、爬升和最终确定的发枪时间，以及用于保存计划的赛事基础信息一起带过去
       const draftData = {
-        name: `${raceInfo.title || '越野赛'} - ${currentGroup.dist}`, 
-        checkpoints: currentGroup.checkpoints
+        // ✨ 新增：传递用于保存到云端 user_plans 的基础字段
+        raceId: raceInfo._id,
+        raceDate: raceInfo.date,
+        groupDist: currentGroup.dist,
+        
+        // 原有字段
+        name: `${raceInfo.name || 'AST越野赛'} - ${currentGroup.dist}`, 
+        checkpoints: currentGroup.checkpoints,
+        actualDist: currentGroup.actualDist, 
+        elevation: currentGroup.elevation,  
+        startTime: selectedStartTime,        
+        availableStartTimes: [currentGroup.startTime, currentGroup.startTime2].filter(t => t) 
       };
 
-      console.log("🚀 极速读取本地组别数据成功，瞬间跃迁！", draftData);
+      console.log("🚀 极速跃迁数据准备就绪！", draftData);
 
-      // 带着数据直接跳跃！
       wx.navigateTo({
         url: `/pages/plan-result/plan-result?h=${h}&m=${m}`,
         success: (navRes) => {
@@ -118,4 +150,4 @@ Page({
       });
     }, 300); 
   }
-})
+});

@@ -2,5 +2,6 @@
   "navigationBarTitleText": "TRL-X",
   "navigationBarBackgroundColor": "#000000",
   "navigationBarTextStyle": "white",
+  "disableScroll": true,
   "usingComponents": {}
 }

@@ -1,0 +1,228 @@
+page {
+  background: #000000;
+  color: #FFFFFF;
+  font-family: 'Inter', sans-serif;
+}
+
+.admin-page {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.form-scroll {
+  flex: 1;
+  width: 100%;
+  height: 0;
+  box-sizing: border-box;
+  padding: 0 40rpx;
+}
+
+.header-titles {
+  display: flex;
+  flex-direction: column;
+  margin-top: 40rpx;
+  margin-bottom: 60rpx;
+}
+.main-title {
+  font-size: 50rpx;
+  font-weight: 900;
+  color: #FF9811;
+}
+
+/* ✨ 历史记录按钮样式 */
+.history-btn {
+  font-size: 24rpx;
+  color: #FF9811;
+  border: 2rpx solid #FF9811;
+  padding: 10rpx 28rpx;
+  border-radius: 30rpx;
+  font-weight: 700;
+}
+.history-btn:active {
+  background: rgba(255, 152, 17, 0.2);
+}
+
+.sub-title {
+  font-size: 24rpx;
+  color: #888888;
+  margin-top: 8rpx;
+}
+
+.section-header {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #888888;
+  margin-bottom: 30rpx;
+  border-bottom: 2rpx solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 16rpx;
+}
+
+.global-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 24rpx;
+  padding: 40rpx;
+  margin-bottom: 40rpx;
+  box-sizing: border-box;
+}
+
+.group-card {
+  background: rgba(255, 152, 17, 0.05);
+  border: 2rpx solid rgba(255, 152, 17, 0.2);
+  border-radius: 24rpx;
+  padding: 40rpx;
+  margin-bottom: 30rpx;
+  box-sizing: border-box;
+}
+
+.group-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2rpx dashed rgba(255, 255, 255, 0.1);
+  padding-bottom: 20rpx;
+  margin-bottom: 30rpx;
+}
+.g-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #FF9811;
+}
+.g-delete {
+  font-size: 24rpx;
+  color: #E53935;
+  background: rgba(229, 57, 53, 0.1);
+  padding: 8rpx 20rpx;
+  border-radius: 8rpx;
+}
+
+.input-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 30rpx;
+}
+.input-group {
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.input-group.half {
+  width: 47%;
+}
+
+.label {
+  font-size: 22rpx;
+  color: #888888;
+  margin-bottom: 12rpx;
+  display: block;
+  font-weight: 700;
+}
+
+.input-field, .picker-field {
+  width: 100%;
+  height: 80rpx;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12rpx;
+  padding: 0 24rpx;
+  font-size: 26rpx;
+  color: #FFFFFF;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  border: 2rpx solid transparent;
+  transition: all 0.3s;
+}
+.input-field:focus {
+  border-color: #FF9811;
+}
+
+.picker-field {
+  color: #555555;
+}
+.picker-field.active {
+  color: #FFFFFF;
+  font-weight: 700;
+}
+.switch-group {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.upload-btn {
+  width: 100%;
+  height: 80rpx;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  color: #FFFFFF;
+}
+.upload-btn.uploaded {
+  background: rgba(54, 225, 83, 0.1);
+  color: #36E153;
+}
+
+.gpx-box {
+  margin-top: 10rpx;
+  height: 100rpx;
+  border: 2rpx dashed rgba(255, 255, 255, 0.3);
+  border-radius: 12rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.gpx-box:active {
+  background: rgba(255, 255, 255, 0.05);
+}
+.gpx-txt {
+  font-size: 24rpx;
+  color: #888888;
+}
+.gpx-txt.active {
+  color: #FF9811;
+  font-weight: 700;
+}
+
+.add-group-btn {
+  width: 100%;
+  height: 90rpx;
+  background: transparent;
+  border: 2rpx solid #FF9811;
+  color: #FF9811;
+  border-radius: 45rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 28rpx;
+  font-weight: 700;
+  margin-top: 20rpx;
+}
+
+.bottom-action {
+  padding: 30rpx 40rpx 60rpx 40rpx;
+  background: linear-gradient(to top, #000000 80%, transparent);
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  box-sizing: border-box;
+}
+.submit-btn {
+  width: 100%;
+  height: 100rpx;
+  background: #FF9811;
+  color: #000000;
+  border-radius: 50rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 32rpx;
+  font-weight: 900;
+  box-shadow: 0 10rpx 30rpx rgba(255, 152, 17, 0.3);
+}

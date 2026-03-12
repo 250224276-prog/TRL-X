@@ -208,7 +208,7 @@
 }
 
 /* ========================================== */
-/* 6. 内容区：制定计划 (新增的样式在这里！) */
+/* 6. 内容区：制定计划 */
 /* ========================================== */
 .content-plan {
   margin-top: 40rpx;
@@ -223,7 +223,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  margin-bottom: 120rpx; /* 给底部悬浮按钮留点空间 */
+  margin-bottom: 40rpx; /* 改小一点，把留白让给下面的发枪时间胶囊 */
 }
 .input-wrap {
   display: flex;
@@ -255,6 +255,35 @@
   color: rgba(255, 255, 255, 0.3);
   margin: 0 40rpx;
   margin-top: -50rpx; /* 微调冒号位置 */
+}
+
+/* ✨ 发枪时间胶囊切换器 */
+.capsule-container {
+  display: flex;
+  background: rgba(255, 255, 255, 0.11);
+  border-radius: 44rpx;
+  height: 100rpx;
+  padding: 10rpx;
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: 120rpx; /* 给底部悬浮按钮留出空间 */
+}
+.capsule-item {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 32rpx;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  color: rgba(255, 255, 255, 0.5);
+  border-radius: 36rpx;
+  transition: all 0.2s ease;
+}
+.capsule-item.active {
+  /* ✨ 统一修改为半透明白底+白字，取消阴影和橙色 */
+  background: rgba(255, 255, 255, 0.15); 
+  color: #FFFFFF;
 }
 
 /* 底部悬浮按钮 */

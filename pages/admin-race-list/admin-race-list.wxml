@@ -1,0 +1,29 @@
+<view class="list-page">
+  <view class="header">
+    <view class="back-btn" bindtap="goBack"><view class="arrow-left"></view></view>
+    <text class="title">历史赛事库</text>
+  </view>
+
+  <scroll-view class="race-scroll" scroll-y>
+    <view class="race-card" wx:for="{{raceList}}" wx:key="_id" bindtap="goToEdit" data-id="{{item._id}}">
+      <view class="rc-main">
+        <text class="rc-name">{{item.name}}</text>
+        <text class="rc-date">{{item.date}} · {{item.location || '未知地点'}}</text>
+      </view>
+      
+      <view class="rc-tags">
+        <text class="tag" style="color:{{tag.color}}; border-color:{{tag.color}}" wx:for="{{item.tags}}" wx:for-item="tag" wx:key="dist">{{tag.dist}}</text>
+      </view>
+      
+      <view class="edit-hint">点击编辑 ✏️</view>
+
+      <view class="delete-btn" catchtap="deleteRace" data-id="{{item._id}}" data-name="{{item.name}}">删除</view>
+    </view>
+
+    <view class="empty-state" wx:if="{{raceList.length === 0 && !loading}}">
+      <text>暂无赛事记录，快去上传第一场吧！</text>
+    </view>
+    
+    <view style="height: 100rpx;"></view>
+  </scroll-view>
+</view>

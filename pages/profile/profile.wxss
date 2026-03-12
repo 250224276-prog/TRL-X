@@ -77,7 +77,7 @@
 /* 功能菜单列表 */
 /* ========================================== */
 .menu-list {
-  margin-top: 60rpx;
+  margin-top: 40rpx;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 44rpx;
   padding: 10rpx 40rpx;
@@ -148,4 +148,50 @@
   font-size: 18rpx; 
   font-weight: 500;
   color: #FFFFFF;
+}
+
+/* ==================== 主理人隐藏入口 (极简适配版) ==================== */
+.admin-portal {
+  margin-top: 40rpx;
+  background: rgba(255, 255, 255, 0.05); /* 统一半透明背景 */
+  border-radius: 44rpx; /* 统一圆角 */
+  padding: 40rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.admin-portal:active {
+  transform: scale(0.98);
+  opacity: 0.8;
+}
+
+.admin-left { 
+  display: flex; 
+  align-items: center; 
+}
+
+/* 顺手把你 WXML 里的那个 👑 皇冠给隐藏掉或者你也可以直接去 wxml 里删了，这样更极简 */
+.admin-icon { 
+  display: none; 
+}
+
+.admin-text-box { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 12rpx;
+}
+
+.admin-title { 
+  font-family: 'Inter', sans-serif;
+  font-size: 32rpx; 
+  font-weight: 700; 
+  color: #FF9811; /* 统一使用品牌橙色 */
+}
+
+.admin-desc { 
+  font-family: 'PingFang SC', sans-serif;
+  font-size: 22rpx; 
+  color: rgba(255, 255, 255, 0.5); 
 }

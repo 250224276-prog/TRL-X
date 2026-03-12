@@ -1,109 +1,132 @@
-// pages/index/index.js
-
-// 获取小程序的全局实例
 const app = getApp();
-
-// 获取云端数据库的遥控器
 const db = wx.cloud.database();
 
 Page({
   data: {
-    // 初始设为空数组，等云端数据回来再填满
-    raceList: [],
+    raceList: [], 
+    myPlans: [],  
     
-    // 控制顶部 UI 状态的变量
     isConnected: false,
     deviceName: 'AST的\nRMB PRO' 
   },
 
-  // 页面加载时触发，去云端拉取数据
   onLoad() {
     this.fetchCloudRaces();
+    this.fetchMyPlans();
   },
 
   onShow() {
-    // 隐藏微信官方原生的底部栏，只用我们自己画的 custom-tabbar
     wx.hideTabBar(); 
     
-    // 保持原本的判断登录连接状态的代码不变
     if (app.globalData && app.globalData.isConnected) {
       this.setData({
         isConnected: true,
         deviceName: app.globalData.deviceName || 'AST的\nRMB PRO'
       });
     }
+    this.fetchMyPlans();
   },
 
-  // ✨ 去云端拉取比赛数据的核心函数（包含时间自动排序魔法）
-  fetchCloudRaces() {
-    wx.showLoading({ title: '加载赛事中...', mask: true });
+  fetchMyPlans() {
+    db.collection('user_plans').orderBy('raceDateMs', 'asc').get({
+      success: res => {
+        let plans = res.data;
+        const nowMs = new Date().setHours(0, 0, 0, 0); // 获取今天凌晨0点的时间戳
 
-    // 去名为 'races' 的集合里拿数据
+        let futurePlans = [];
+
+        plans.forEach(p => {
+          let daysLeft = -1;
+          if (p.raceDateMs && p.raceDateMs >= nowMs) {
+            // 计算剩余天数，防止同一天被算成负数
+            daysLeft = Math.ceil((p.raceDateMs - new Date().getTime()) / (1000 * 60 * 60 * 24));
+            if (daysLeft < 0) daysLeft = 0; // 兜底：如果是今天，直接置为 0
+          } else {
+            // 比赛时间在今天之前，直接跳过不展示在首页
+            return; 
+          }
+          
+          let pureName = p.raceName || '';
+          if (p.groupDist && pureName.includes(p.groupDist)) {
+            pureName = pureName.replace(` - ${p.groupDist}`, '').replace(p.groupDist, '').trim();
+          }
+
+          futurePlans.push({
+            ...p,
+            pureRaceName: pureName,
+            daysLeft: daysLeft,
+            displayTime: p.targetHours ? `${p.targetHours}h ${p.targetMinutes}min` : '未制定计划'
+          });
+        });
+
+        this.setData({ myPlans: futurePlans });
+      },
+      fail: err => {
+        console.error("获取我的计划失败:", err);
+      }
+    });
+  },
+
+  parseTime(dateStr) {
+    if (!dateStr) return 0;
+    const nums = dateStr.match(/\d+/g); 
+    if (nums && nums.length >= 3) {
+      return new Date(nums[0], nums[1] - 1, nums[2]).getTime();
+    }
+    return 0;
+  },
+
+  fetchCloudRaces() {
+    wx.showLoading({ title: '加载中...', mask: true });
+    const nowMs = new Date().setHours(0, 0, 0, 0); // 获取今天凌晨0点
+
     db.collection('races').get({
       success: res => {
-        console.log("☁️ 云端获取的原始数据：", res.data);
-
-        // ✨ 核心魔法：按比赛日期进行“升序”排列（时间越早越靠前）
         let sortedRaces = res.data.sort((a, b) => {
-          // 将 "2026年 3月 29号" 转化为计算机能对比的时间戳数字
-          const parseTime = (dateStr) => {
-            if (!dateStr) return 0;
-            // 提取字符串里的所有数字（年、月、日）
-            const nums = dateStr.match(/\d+/g); 
-            if (nums && nums.length >= 3) {
-              // JS 的 Date 对象里，月份是从 0 开始的，所以要减去 1
-              return new Date(nums[0], nums[1] - 1, nums[2]).getTime();
-            }
-            return 0; // 格式解析失败则默认排到最前面
-          };
-
-          // 比较两场比赛的时间
-          return parseTime(a.date) - parseTime(b.date);
+          return this.parseTime(a.date) - this.parseTime(b.date);
         });
 
-        // 把排好序的数组塞进页面！
-        this.setData({
-          raceList: sortedRaces 
+        // 过滤：只保留日期大于等于今天的比赛
+        let futureRaces = sortedRaces.filter(race => {
+          return this.parseTime(race.date) >= nowMs;
         });
-        
+
+        this.setData({ raceList: futureRaces });
         wx.hideLoading();
       },
       fail: err => {
         console.error("❌ 获取云端数据失败：", err);
         wx.hideLoading();
-        wx.showToast({ title: '网络请求失败', icon: 'none' });
       }
     });
   },
 
-  goToConnect() {
-    wx.navigateTo({ url: '/pages/ble-connect/ble-connect' });
-  },
-
-  goToMore() {
-    wx.navigateTo({ url: '/pages/race-list/race-list' });
-  },
-
-  goToDetail(e) {
-    const raceId = e.currentTarget.dataset.id;
-    console.log("👉 第一步：检测到点击！拿到的赛事ID是：", raceId);
+  goToMyPlan(e) {
+    const planId = e.currentTarget.dataset.id;
+    console.log("👉 [点击我的计划] 拿到的计划ID是：", planId);
+    
+    if (!planId) {
+      wx.showToast({ title: '数据异常无法跳转', icon: 'none' });
+      return;
+    }
 
     wx.navigateTo({
-      // 这里的路径必须和 app.json 里配置的一模一样
-      url: `/pages/race-detail/race-detail?id=${raceId}`,
-      success: function() {
-        console.log("✅ 第二步：跳转页面成功！");
-      },
-      fail: function(err) {
-        console.error("❌ 第二步：跳转失败！微信给出的原因是：", err);
+      url: `/pages/plan-result/plan-result?id=${planId}`,
+      fail: err => {
+        console.error("❌ 跳转到 plan-result 失败：", err);
+        wx.showToast({ title: '页面跳转失败', icon: 'none' });
       }
     });
   },
 
-  goToProfile() {
-    wx.switchTab({
-      url: '/pages/profile/profile'
-    });
-  }
-  
-})
+  goToMorePlans() {
+    wx.navigateTo({ url: '/pages/my-plans/my-plans' });
+  },
+
+  goToConnect() { wx.navigateTo({ url: '/pages/ble-connect/ble-connect' }); },
+  goToMore() { wx.navigateTo({ url: '/pages/race-list/race-list' }); },
+  goToDetail(e) {
+    wx.navigateTo({ url: `/pages/race-detail/race-detail?id=${e.currentTarget.dataset.id}` });
+  },
+  goToProfile() { wx.switchTab({ url: '/pages/profile/profile' }); }
+});

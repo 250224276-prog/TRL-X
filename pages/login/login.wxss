@@ -1,106 +1,27 @@
-.container {
-  min-height: 100vh;
-  background-color: #000000;
-  padding: 0 40rpx 100rpx 40rpx;
-  box-sizing: border-box;
-  color: #FFFFFF;
-}
+page { background: #000000; color: #FFFFFF; font-family: 'Inter', sans-serif; }
+.login-page { padding: 100rpx 60rpx; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; }
 
-/* 带有返回按钮的自定义导航 */
-.custom-nav {
-  height: 180rpx;
-  display: flex;
-  align-items: flex-end;
-  padding-bottom: 20rpx;
-  position: relative;
-}
-.back-btn {
-  width: 20rpx;
-  height: 20rpx;
-  border-bottom: 4rpx solid #FFFFFF;
-  border-left: 4rpx solid #FFFFFF;
-  transform: rotate(45deg);
-  margin-bottom: 10rpx;
-  padding: 10rpx;
-  position: absolute;
-  left: 0;
-}
-.nav-title {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  font-family: 'Inter', sans-serif;
-  font-weight: 600;
-  font-size: 36rpx;
-}
+.back-btn { width: 60rpx; height: 60rpx; margin-bottom: 80rpx; }
+.arrow-left { width: 24rpx; height: 24rpx; border-left: 4rpx solid #FFF; border-bottom: 4rpx solid #FFF; transform: rotate(45deg); }
 
-.brand-header {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-top: 60rpx;
-  margin-bottom: 80rpx;
-}
-.default-avatar {
-  width: 160rpx;
-  height: 160rpx;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.05);
-  border: 4rpx solid rgba(255, 255, 255, 0.15);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 30rpx;
-}
-.inner-circle { width: 60rpx; height: 60rpx; border-radius: 50%; background: rgba(255, 255, 255, 0.2); }
-.brand-title { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 44rpx; margin-bottom: 12rpx; letter-spacing: 2rpx; }
-.brand-subtitle { font-family: 'PingFang SC', sans-serif; font-size: 24rpx; color: rgba(255, 255, 255, 0.4); letter-spacing: 6rpx; }
+.header-titles { margin-bottom: 80rpx; display: flex; flex-direction: column; }
+.main-title { font-size: 64rpx; font-weight: 900; letter-spacing: 2rpx; color: #FF9849; }
+.sub-title { font-size: 28rpx; color: #888; margin-top: 10rpx; letter-spacing: 4rpx; }
 
-.auth-card {
-  background: rgba(255, 255, 255, 0.11);
-  border-radius: 56rpx;
-  padding: 60rpx 50rpx;
-}
+/* 登录/注册切换标签 */
+.tab-box { display: flex; margin-bottom: 60rpx; border-bottom: 2rpx solid rgba(255,255,255,0.1); }
+.tab { font-size: 32rpx; font-weight: 700; color: #666; padding-bottom: 20rpx; margin-right: 60rpx; position: relative; transition: all 0.3s; }
+.tab.active { color: #FFF; }
+.tab.active::after { content: ''; position: absolute; bottom: -2rpx; left: 0; width: 100%; height: 6rpx; background: #FF9849; border-radius: 4rpx; }
 
-.auth-tabs {
-  display: flex;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 36rpx;
-  height: 80rpx;
-  margin-bottom: 60rpx;
-  padding: 6rpx;
-}
-.tab { flex: 1; display: flex; justify-content: center; align-items: center; font-size: 28rpx; font-weight: 500; color: rgba(255, 255, 255, 0.4); border-radius: 30rpx; transition: all 0.3s ease; }
-.tab.active { color: #FFFFFF; background: rgba(255, 255, 255, 0.15); font-weight: 600; }
+/* 表单输入区 */
+.form-box { margin-bottom: 80rpx; }
+.input-group { margin-bottom: 40rpx; }
+.label { font-size: 24rpx; color: #888; margin-bottom: 16rpx; display: block; font-weight: 700; }
+.input-field { width: 100%; height: 90rpx; background: rgba(255,255,255,0.05); border-radius: 16rpx; padding: 0 30rpx; font-size: 32rpx; color: #FFF; box-sizing: border-box; border: 2rpx solid transparent; transition: border 0.3s; }
+.input-field:focus { border-color: #FF9849; background: rgba(255,152,73,0.05); }
+.ph-style { color: #444; }
 
-.input-box {
-  height: 110rpx;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 36rpx;
-  display: flex;
-  align-items: center;
-  padding: 0 40rpx;
-  margin-bottom: 30rpx;
-}
-.input-box input { flex: 1; color: #FFFFFF; font-size: 30rpx; font-family: 'Inter', sans-serif; }
-.ph-color { color: rgba(255, 255, 255, 0.25); }
-
-.submit-btn {
-  margin-top: 50rpx;
-  height: 110rpx;
-  background: #FF9811;
-  color: #000000;
-  font-family: 'PingFang HK', sans-serif;
-  font-size: 32rpx;
-  font-weight: 700;
-  border-radius: 55rpx;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  box-shadow: 0 10rpx 40rpx rgba(255, 152, 17, 0.2);
-  transition: all 0.2s ease;
-}
-.submit-btn:active { transform: scale(0.98); opacity: 0.9; }
-
-.forgot-pwd { margin-top: 40rpx; display: flex; justify-content: center; }
-.forgot-pwd text { font-size: 24rpx; color: rgba(255, 255, 255, 0.4); border-bottom: 2rpx solid rgba(255, 255, 255, 0.2); padding-bottom: 4rpx; }
+/* 提交按钮 */
+.submit-btn { width: 100%; height: 100rpx; background: #FF9849; color: #000; border-radius: 50rpx; display: flex; justify-content: center; align-items: center; font-size: 32rpx; font-weight: 900; letter-spacing: 2rpx; box-shadow: 0 10rpx 30rpx rgba(255,152,73,0.3); transition: transform 0.1s; }
+.submit-btn:active { transform: scale(0.98); }

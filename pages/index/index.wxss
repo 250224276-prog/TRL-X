@@ -1,10 +1,21 @@
 /* ========================================== */
+/* ✨ 新增：为了让内部滚动生效，外层必须锁死且设定为 Flex 布局 */
+/* ========================================== */
+page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; 
+}
+
+/* ========================================== */
 /* 全局基础布局 */
 /* ========================================== */
 .container {
-  min-height: 100vh;
+  flex: 1;
+  height: 0;
+  width: 100%;
   background-color: #000000;
-  /* 底部 padding 增加到 200rpx，防止列表被底部导航栏挡住 */
   padding: 60rpx 40rpx 200rpx 40rpx;
   box-sizing: border-box;
   color: #FFFFFF;
@@ -49,10 +60,9 @@
   font-family: 'Inter', sans-serif;
   font-weight: 700;
   font-size: 70rpx;
-  line-height: 80rpx; /* 让 "AST的" 和 "RMB PRO" 换行后行距舒服 */
-  white-space: pre-line; /* 识别文本里的 \n 换行符 */
+  line-height: 80rpx; 
+  white-space: pre-line; 
 }
-/* Figma里的向下小三角 */
 .polygon-arrow {
   width: 0;
   height: 0;
@@ -63,7 +73,6 @@
   margin-top: 30rpx;
 }
 
-/* 3个胶囊状态牌 */
 .status-tags {
   display: flex;
   gap: 20rpx;
@@ -77,7 +86,6 @@
   border-radius: 36rpx;
 }
 
-/* 状态牌小圆点 */
 .icon-dot { width: 14rpx; height: 14rpx; border-radius: 50%; }
 .dot-blue { background: #209BFF; }
 .dot-green { background: #36E153; }
@@ -93,7 +101,6 @@
 .text-green { color: #36E153; }
 .text-orange { color: #FF9811; }
 
-
 /* ========================================== */
 /* 列表区块基础样式 */
 /* ========================================== */
@@ -103,7 +110,7 @@
 .section-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: center; /* ✨ 对齐方式微调 */
   margin-bottom: 30rpx;
 }
 .section-title {
@@ -112,12 +119,11 @@
   font-size: 44rpx; 
 }
 .view-more {
-  font-size: 32rpx;
+  font-size: 30rpx; /* ✨ 字号微调 */
   color: rgba(54, 225, 83, 0.6); 
   font-weight: 500;
 }
 
-/* 空状态卡片 */
 .empty-card {
   height: 150rpx;
   background: rgba(255, 255, 255, 0.11);
@@ -133,125 +139,229 @@
   opacity: 0.6;
 }
 
-/* 赛事卡片列表容器 */
-.race-list {
+/* ========================================== */
+/* ✨ 修改：已导入的 比赛与计划 专属 UI (极其紧凑版) */
+/* ========================================== */
+.my-plan-card {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.11);
+  border-radius: 40rpx; 
+  padding: 8rpx 36rpx; /* ✨ 大幅收紧了卡片内边距 */
+  box-sizing: border-box;
+}
+
+.plan-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16rpx 0; /* ✨ 行与行的间距变得更小 */
+  position: relative;
+}
+
+.plan-info-left {
   display: flex;
   flex-direction: column;
-  gap: 30rpx;
+  gap: 4rpx; /* ✨ 名称和日期的间距变得极小 */
+  flex: 1; 
+  overflow: hidden; 
+  padding-right: 20rpx; 
 }
 
-/* ========================================== */
-/* 赛事卡片 (自由排版模式核心区域) */
-/* ========================================== */
-.race-card {
-  position: relative; /* 核心：建立卡片内部坐标系 */
-  width: 100%;        
-  height: 206rpx;     
-  background: rgba(255, 255, 255, 0.11);
-  border-radius: 56rpx;
-  overflow: hidden;   
-}
-
-/* 1. 卡片头部总容器 (名称 + ITRA标签 + 箭头) */
-.card-header {
-  position: absolute;
-  left: 40rpx;
-  top: 30rpx;
-  right: 40rpx; /* 占据左右两侧空间 */
-  display: flex;
-  justify-content: space-between; /* 名字组靠左，小箭头靠右 */
-  align-items: center;
-}
-
-/* 名字与标签打包组 */
-.name-group {
+.plan-title-group {
   display: flex;
   align-items: center;
-  gap: 16rpx; /* ITRA 标签与名字的间距 */
+  gap: 12rpx; 
+  width: 100%;
 }
 
-/* 赛事名称 (删除了原本的绝对定位) */
-.race-name {
+.plan-name {
   font-family: 'Inter', sans-serif;
   font-weight: 700;
-  font-size: 32rpx;
-  color: #FF9811;
+  font-size: 28rpx; 
+  color: #FFFFFF;
+  white-space: nowrap; 
+  overflow: hidden; 
+  text-overflow: ellipsis; 
+  flex-shrink: 1; 
 }
 
-/* ITRA 角标 (删除了原本的绝对定位，现在由 Flex 控制) */
-.itra-tag {
-  font-size: 20rpx;
-  font-family: 'PingFang SC', sans-serif;
-  font-weight: 500;
-  color: #FF9811;
-  margin-top: 4rpx; /* 微调：让它和名字的视觉中心稍微对齐一点 */
-}
-
-/* 右上角的小箭头 (删除了绝对定位) */
-.arrow-right-small {
-  width: 16rpx;
-  height: 16rpx;
-  border-top: 3rpx solid rgba(255, 255, 255, 0.5);
-  border-right: 3rpx solid rgba(255, 255, 255, 0.5);
-  transform: rotate(45deg);
-}
-
-/* 4. 比赛日期 (维持原有的绝对定位) */
-.race-date {
-  position: absolute;
-  left: 40rpx;        
-  top: 72rpx;         
-  font-family: 'PingFang SC', sans-serif;
-  font-size: 26rpx;
-  color: rgba(255, 255, 255, 0.6);
-  font-weight: 300;
-}
-
-/* 5. 赛事地点 (维持原有的绝对定位) */
-.race-location {
-  position: absolute;
-  right: 40rpx;       
-  top: 140rpx;         
-  font-family: 'PingFang SC', sans-serif;
-  font-size: 16rpx;
-  color: rgba(255, 255, 255, 0.455);
-  line-height: 1.4;
-  text-align: right;  
-}
-
-/* 6. 底部公里数 Tag 列表容器 (维持原有的绝对定位) */
-.tag-container {
-  position: absolute;
-  left: 40rpx;        
-  bottom: 26rpx;      
-  display: flex;
-  gap: 16rpx;
-}
-
-.distance-tag {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 30rpx; /* 假设你改成了完美的半圆胶囊 */
-  
-  /* ✨ 修改 1：稍微加大一点点上下边距，让胶囊稍微饱满一点 */
-  padding: 8rpx 20rpx; 
-  
-  /* ✨ 修改 2：用 Flex 强行上下左右居中 */
+.plan-group-tag {
+  background: rgba(255, 255, 255, 0.08); 
+  border-radius: 16rpx; /* ✨ 胶囊变得更圆润迷你 */
+  padding: 2rpx 10rpx; 
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 1rpx solid rgba(255, 255, 255, 0.05);
+  font-family: 'Inter', sans-serif;
+  font-size: 16rpx; 
+  font-weight: 600; 
+  line-height: 1;
+  color: #36E153; 
+  flex-shrink: 0; 
+}
+
+.plan-date {
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 18rpx; 
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 2rpx; 
+}
+
+.plan-info-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4rpx; 
+  margin-right: 30rpx; 
+  flex-shrink: 0; 
+}
+
+.plan-time {
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 26rpx; 
+  color: #FFFFFF;
+}
+
+.plan-countdown {
+  font-family: 'PingFang HK', sans-serif;
+  font-weight: 500;
+  font-size: 22rpx; 
+  color: #36E153; 
+  opacity: 0.6;
+}
+
+.dark-arrow {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%) rotate(45deg);
+  border-color: rgba(255, 255, 255, 0.4) !important; 
+}
+
+.plan-divider {
+  width: 100%;
+  height: 1rpx;
+  background: rgba(255, 255, 255, 0.15); /* ✨ 让分割线稍微亮一点点，界限分明 */
+}
+
+/* ========================================== */
+/* 赛事卡片列表容器 */
+/* ========================================== */
+.race-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx; 
+}
+
+.race-card {
+  position: relative; 
+  width: 100%;        
+  height: 170rpx;     
+  background: rgba(255, 255, 255, 0.11);
+  border-radius: 40rpx; 
+  overflow: hidden;   
+  transition: all 0.2s ease;
+}
+.race-card:active {
+  background: rgba(255, 255, 255, 0.15); 
+}
+
+.card-header {
+  position: absolute;
+  left: 36rpx;  
+  top: 24rpx;   
+  right: 36rpx; 
+  display: flex;
+  justify-content: space-between; 
+  align-items: center;
+}
+
+.name-group {
+  display: flex;
+  align-items: center;
+  gap: 12rpx; 
+}
+
+.race-name {
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 30rpx; 
+  color: #FF9811;
+}
+
+.itra-tag {
+  font-size: 16rpx; 
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  color: #FF9811; 
+  background: rgba(255, 255, 255, 0.1); 
+  padding: 4rpx 12rpx; 
+  border-radius: 20rpx; 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  margin-top: 2rpx; 
+}
+
+.arrow-right-small {
+  width: 14rpx;
+  height: 14rpx;
+  border-top: 3rpx solid rgba(255, 255, 255, 0.4);
+  border-right: 3rpx solid rgba(255, 255, 255, 0.4);
+  transform: rotate(45deg);
+}
+
+.race-date {
+  position: absolute;
+  left: 36rpx;        
+  top: 66rpx;     
+  font-family: 'PingFang SC', sans-serif;
+  font-size: 24rpx; 
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 300;
+}
+
+.race-location {
+  position: absolute;
+  right: 36rpx;       
+  bottom: 24rpx;   
+  font-family: 'PingFang SC', sans-serif;
+  font-size: 18rpx;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: right;  
+}
+
+.tag-container {
+  position: absolute;
+  left: 36rpx;        
+  bottom: 20rpx;   
+  display: flex;
+  gap: 12rpx;      
+}
+
+.distance-tag {
+  background: rgba(255, 255, 255, 0.08); 
+  border-radius: 20rpx; 
+  padding: 6rpx 16rpx; 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1rpx solid rgba(255, 255, 255, 0.05); 
 }
 
 .distance-text {
-  font-family: 'PingFang SC', sans-serif;
-  font-size: 20rpx;
-  font-weight: 300;
-  
-  /* ✨ 修改 3：设为 1，压平中文字体自带的隐形上下留白 */
+  font-family: 'Inter', sans-serif;
+  font-size: 18rpx;
+  font-weight: 600; 
   line-height: 1; 
 }
 
 /* ========================================== */
-/* 新增：底部自定义导航栏 */
+/* 底部自定义导航栏 */
 /* ========================================== */
 .custom-tabbar {
   position: fixed;
@@ -271,11 +381,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* 取消了强制的 opacity: 0.5，因为图标本身就是带透明度的 PNG */
   transition: all 0.2s ease;
 }
 
-/* 文字依旧需要根据是否 active 来改变透明度 */
 .tab-item:not(.active) .tab-text {
   opacity: 0.5; 
 }
@@ -284,12 +392,10 @@
   opacity: 1; 
 }
 
-/* ✨ 修改后的图标样式 */
 .tab-icon {
   width: 50rpx;
   height: 50rpx;
   margin-bottom: 8rpx;
-  /* 已经删除了 background: #D9D9D9 和 border-radius，让你的透明背景 PNG 图标完美显示 */
 }
 
 .tab-text {

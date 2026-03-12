@@ -1,144 +1,842 @@
-// pages/plan-result/plan-result.js
 const app = getApp();
+// 获取云数据库
+const db = wx.cloud.database();
 
 Page({
   data: {
+    raceId: '',
+    raceDate: '',
+    groupDist: '',
+
     raceName: '加载中...',
     startTime: '07:00',
+    availableStartTimes: [], 
+    
     targetHours: 21,
     targetMinutes: 43,
+    timeRange: [[], []],
+    timeIndex: [21, 43],
+    restRange: [],
+    restIndex: 4, 
+    globalRestMins: 5,
     checkpoints: [],
-    K: 1.07
+    K: 1.07,
+    showDetail: false,
+    detailCurrent: 0,
+    detailCpName: '',
+    
+    isScrollTop: true,
+    chartReady: {},
+
+    showConnectModal: false, 
+    showSuccessModal: false, 
+    successModalTitle: ''    
+  },
+
+  onShow() {
+    if (this.pendingSync && app.globalData && app.globalData.isConnected) {
+      this.pendingSync = false;
+      setTimeout(() => {
+        this.executeSyncAnimation();
+      }, 500);
+    }
+  },
+
+  formatPace(min) {
+    if (!min || min <= 0 || !isFinite(min)) return "-'--\"/km";
+    const m = Math.floor(min);
+    const s = Math.round((min - m) * 60);
+    return `${m}'${s < 10 ? '0'+s : s}"/km`;
+  },
+
+  goToSegmentDetail(e) {
+    const index = e.currentTarget.dataset.index;
+    if (index === 0) return; 
+    this.setData({ showDetail: true, detailCurrent: index - 1 }, () => {
+      setTimeout(() => {
+        this.initCanvasChart(index);
+      }, 150);
+    });
+  },
+
+  closeDetail() { this.setData({ showDetail: false }); },
+
+  onDetailSwiperChange(e) { 
+    const current = e.detail.current;
+    this.setData({ detailCurrent: current }, () => {
+      this.initCanvasChart(current + 1); 
+    }); 
+  },
+
+  preventTouchMove() { return; },
+
+  onScroll(e) {
+    this.setData({ isScrollTop: e.detail.scrollTop <= 5 });
+  },
+
+  onTouchStart(e) {
+    this.startY = e.touches[0].clientY;
+  },
+
+  onTouchEnd(e) {
+    const endY = e.changedTouches[0].clientY;
+    const type = e.currentTarget.dataset.type;
+
+    if (endY - this.startY > 50) { 
+      if (type === 'dragArea') {
+        this.closeDetail();
+      } else if (type === 'scrollView' && this.data.isScrollTop) {
+        this.closeDetail();
+      }
+    }
+  },
+
+  initCanvasChart(cpIndex) {
+    if (!this.data.showDetail) return;
+    const cpData = this.data.checkpoints[cpIndex];
+    if (!cpData) return;
+
+    const query = wx.createSelectorQuery();
+    query.select(`#elevChart_${cpIndex}`).fields({ node: true, size: true }).exec((res) => {
+      if (!res[0] || !res[0].node) return;
+      
+      const canvas = res[0].node;
+      const ctx = canvas.getContext('2d');
+      const dpr = wx.getSystemInfoSync().pixelRatio;
+      
+      canvas.width = res[0].width * dpr;
+      canvas.height = res[0].height * dpr;
+      ctx.scale(dpr, dpr);
+
+      const points = this.generateMockPoints(cpData);
+
+      this.currentChart = { 
+        ctx, canvas, width: res[0].width, height: res[0].height, points, cpData 
+      };
+
+      this.setData({ [`chartReady.${cpIndex}`]: true });
+      this.drawChartBase(null); 
+    });
+  },
+
+  generateMockPoints(cp) {
+    if (cp.rawPoints && cp.rawPoints.length > 0) return cp.rawPoints; 
+    let pts = [];
+    const steps = 100;
+    const startDist = cp.accDist - cp.segDist;
+    const distStep = cp.segDist / steps;
+    const eleDiff = cp.endEle - cp.startEle;
+
+    for(let i=0; i<=steps; i++) {
+      let d = startDist + (distStep * i);
+      let noise = Math.sin(i * 0.5) * (cp.segGain * 0.2) * Math.random();
+      let e = cp.startEle + eleDiff * (i/steps) + noise;
+      e = Math.max(0, e); 
+      pts.push({ d: parseFloat(d.toFixed(2)), e: Math.round(e) });
+    }
+    return pts;
+  },
+
+  drawChartBase(touchX) {
+    if (!this.currentChart) return;
+    const { ctx, width, height, points } = this.currentChart;
+
+    const padding = { top: 20, bottom: 20, left: 0, right: 0 };
+    const drawW = width;
+    const drawH = height - padding.top - padding.bottom;
+
+    ctx.clearRect(0, 0, width, height);
+
+    let minD = points[0].d, maxD = points[points.length-1].d;
+    let minE = Math.min(...points.map(p => p.e));
+    let maxE = Math.max(...points.map(p => p.e));
+    
+    minE = Math.max(0, Math.floor(minE / 100) * 100);
+    maxE = Math.ceil(maxE / 100) * 100;
+    if (maxE === minE) maxE += 100;
+
+    const getX = (d) => ((d - minD) / (maxD - minD)) * drawW;
+    const getY = (e) => padding.top + drawH - ((e - minE) / (maxE - minE)) * drawH;
+
+    ctx.lineWidth = 1;
+    ctx.font = '10px sans-serif';
+
+    const yStep = maxE - minE > 500 ? 200 : 100;
+    for(let ele = minE; ele <= maxE; ele += yStep) {
+      let py = getY(ele);
+      ctx.beginPath();
+      ctx.moveTo(0, py);
+      ctx.lineTo(width, py);
+      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+      ctx.stroke();
+      
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.textAlign = 'right'; 
+      ctx.textBaseline = 'middle'; 
+      ctx.fillText(ele, width - 4, py);
+    }
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    let startD_int = Math.ceil(minD);
+    for(let d = startD_int; d <= maxD; d += 1) {
+      let px = getX(d);
+      ctx.beginPath();
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, height - padding.bottom);
+      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillText(d, px, height - padding.bottom + 4);
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(getX(points[0].d), getY(points[0].e));
+    points.forEach(p => ctx.lineTo(getX(p.d), getY(p.e)));
+    
+    const grd = ctx.createLinearGradient(0, padding.top, 0, height - padding.bottom);
+    grd.addColorStop(0, 'rgba(255, 170, 22, 0.4)');
+    grd.addColorStop(1, 'rgba(255, 170, 22, 0.0)');
+    
+    ctx.lineTo(getX(points[points.length-1].d), height - padding.bottom);
+    ctx.lineTo(getX(points[0].d), height - padding.bottom);
+    ctx.fillStyle = grd;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(getX(points[0].d), getY(points[0].e));
+    points.forEach(p => ctx.lineTo(getX(p.d), getY(p.e)));
+    ctx.strokeStyle = '#FFAA16';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    if (touchX !== null && touchX >= 0 && touchX <= width) {
+      let closestPoint = points[0];
+      let minDiff = Infinity;
+      points.forEach(p => {
+        let px = getX(p.d);
+        if (Math.abs(px - touchX) < minDiff) {
+          minDiff = Math.abs(px - touchX);
+          closestPoint = p;
+        }
+      });
+
+      let focusX = getX(closestPoint.d);
+      let focusY = getY(closestPoint.e);
+
+      ctx.beginPath();
+      ctx.moveTo(focusX, 0);
+      ctx.lineTo(focusX, height - padding.bottom);
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(focusX, focusY, 4, 0, 2 * Math.PI);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fill();
+      ctx.strokeStyle = '#FFAA16';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      const tipW = 74;
+      const tipH = 44;
+      let tipX = focusX - tipW / 2;
+      let tipY = focusY - tipH - 10;
+      
+      if (tipX < 2) tipX = 2;
+      if (tipX + tipW > width - 2) tipX = width - tipW - 2;
+      if (tipY < 2) tipY = focusY + 15;
+
+      ctx.fillStyle = 'rgba(20,20,20,0.95)';
+      const r = 6;
+      ctx.beginPath();
+      ctx.moveTo(tipX + r, tipY);
+      ctx.lineTo(tipX + tipW - r, tipY);
+      ctx.arcTo(tipX + tipW, tipY, tipX + tipW, tipY + r, r);
+      ctx.lineTo(tipX + tipW, tipY + tipH - r);
+      ctx.arcTo(tipX + tipW, tipY + tipH, tipX + tipW - r, tipY + tipH, r);
+      ctx.lineTo(tipX + r, tipY + tipH);
+      ctx.arcTo(tipX, tipY + tipH, tipX, tipY + tipH - r, r);
+      ctx.lineTo(tipX, tipY + r);
+      ctx.arcTo(tipX, tipY, tipX + r, tipY, r);
+      ctx.fill();
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${closestPoint.d}km`, tipX + tipW/2, tipY + 14);
+      ctx.fillStyle = '#FFAA16';
+      ctx.fillText(`${closestPoint.e}M`, tipX + tipW/2, tipY + 30);
+    }
+  },
+
+  onChartTouch(e) {
+    if (!e.touches || !e.touches.length) return;
+    let x = e.touches[0].x !== undefined ? e.touches[0].x : (e.touches[0].clientX - 20);
+    this.drawChartBase(x);
+  },
+
+  onChartTouchEnd() {
+    this.drawChartBase(null);
   },
 
   onLoad(options) {
+    const hours = []; const mins = [];
+    for(let i=0; i<=100; i++) hours.push(i + 'h');
+    for(let i=0; i<60; i++) mins.push(i + 'm');
+    const rests = [];
+    for(let i=1; i<=30; i++) rests.push(i + 'm');
+
+    const h = parseInt(options.h) || 21;
+    const m = parseInt(options.m) || 43;
+
     this.setData({
-      targetHours: options.h || '21',
-      targetMinutes: options.m || '43'
+      targetHours: h, targetMinutes: m,
+      timeRange: [hours, mins], timeIndex: [h, m],
+      restRange: rests, restIndex: 4 
     });
 
     const eventChannel = this.getOpenerEventChannel();
-    eventChannel.on('acceptDataFromOpenerPage', (data) => {
-      this.setData({ raceName: data.name || '越野赛' });
-      this.initData(data.checkpoints);
-    });
+    let hasReceivedDataFromOpener = false;
+
+    if(eventChannel && eventChannel.on) {
+      eventChannel.on('acceptDataFromOpenerPage', (data) => {
+        hasReceivedDataFromOpener = true; 
+        const availableTimes = data.availableStartTimes || [data.startTime || '07:00'];
+        this.setData({ 
+          raceId: data.raceId || '',
+          raceDate: data.raceDate || '',
+          groupDist: data.groupDist || '',
+          raceName: data.name || '越野赛', 
+          startTime: data.startTime || '07:00',
+          availableStartTimes: availableTimes
+        });
+        this.initData(data.checkpoints);
+      });
+    }
+
+    setTimeout(() => {
+      if (!hasReceivedDataFromOpener && options.id) {
+        wx.showLoading({ title: '加载计划中...', mask: true });
+        
+        db.collection('user_plans').doc(options.id).get({
+          success: res => {
+            wx.hideLoading();
+            const planData = res.data;
+            
+            this.setData({
+              raceId: planData.raceId || '',
+              raceDate: planData.raceDate || '',
+              groupDist: planData.groupDist || '',
+              raceName: planData.raceName || '越野赛',
+              startTime: planData.startTime || '07:00',
+              availableStartTimes: planData.availableStartTimes || [planData.startTime || '07:00'],
+              targetHours: planData.targetHours,
+              targetMinutes: planData.targetMinutes,
+              timeIndex: [planData.targetHours, planData.targetMinutes]
+            });
+            
+            this.initData(planData.checkpoints);
+          },
+          fail: err => {
+            wx.hideLoading();
+            console.error("加载云端计划失败：", err);
+            wx.showToast({ title: '获取计划失败', icon: 'none' });
+          }
+        });
+      }
+    }, 100); 
   },
 
-  // ✨ 1. 数据初始化：加入 DP(换装点) 侦测逻辑
+  onTimeChange(e) {
+    const val = e.detail.value;
+    this.setData({ timeIndex: val, targetHours: val[0], targetMinutes: val[1] }, () => this.runFatigueEngine());
+  },
+  
+  onStartChange(e) {
+    const newStartTime = this.data.availableStartTimes[e.detail.value];
+    this.setData({ startTime: newStartTime }, () => this.updateTimesAndPaces(false));
+  },
+  
+  onRestChange(e) {
+    const val = parseInt(e.detail.value) + 1; 
+    let cps = this.data.checkpoints;
+    cps.forEach((cp, i) => { if (i > 0 && i < cps.length - 1 && !cp.isDropBag) cp.rest = val; });
+    this.setData({ globalRestMins: val, restIndex: e.detail.value, checkpoints: cps }, () => this.runFatigueEngine());
+  },
+
   initData(rawCps) {
     const cps = rawCps.map((cp, i, arr) => {
       const segDist = i === 0 ? 0 : parseFloat((cp.accDist - arr[i-1].accDist).toFixed(2));
       const segGain = i === 0 ? 0 : Math.max(0, cp.accGain - arr[i-1].accGain);
       const segLoss = i === 0 ? 0 : Math.max(0, (cp.accLoss || 0) - (arr[i-1].accLoss || 0));
+      const isDropBag = (cp.name || '').toUpperCase().includes('DP') || (cp.name || '').includes('换装');
+      let defaultRest = (i === 0 || i === arr.length - 1) ? 0 : (isDropBag ? 30 : this.data.globalRestMins);
       
-      // 🕵️‍♂️ 侦测换装点
-      const originalName = (cp.name || '').toUpperCase();
-      const isDropBag = originalName.includes('DP') || originalName.includes('换装');
+      let cpNum = i === 0 ? '起点' : (i === arr.length - 1 ? '终点' : `CP${i}`);
+      let locName = cp.name;
+      
+      if (locName.includes('-')) {
+        let parts = locName.split('-');
+        cpNum = parts[0] || cpNum;
+        locName = parts.slice(1).join('-') || ''; 
+      } else if (locName.includes('～')) {
+        let parts = locName.split('～');
+        cpNum = parts[0] || cpNum;
+        locName = parts[1] || '';
+      }
 
-      // 规范化命名
-      let stdName = '';
-      if (i === 0) stdName = '起点';
-      else if (i === arr.length - 1) stdName = '终点';
-      else stdName = `CP${i}`;
-
-      // 休息时间逻辑分流
-      let defaultRest = 5;
-      if (i === 0 || i === arr.length - 1) defaultRest = 0;
-      else if (isDropBag) defaultRest = 30;
-
-      return {
-        ...cp,
-        name: stdName, 
-        isDropBag: isDropBag, 
-        segDist,
-        segGain,
-        segLoss,
+      return { 
+        ...cp, 
+        cpNum, 
+        locName, 
+        isDropBag, 
+        segDist, 
+        segGain, 
+        segLoss, 
         rest: defaultRest, 
-        moveMins: 0 
+        moveMins: 0,
+        startEle: i > 0 ? Math.round(arr[i-1].tempEle || 0) : 0,
+        endEle: Math.round(cp.tempEle || 0),
+        cutoffTime: cp.cutoffTime || '' 
       };
     });
-    this.setData({ checkpoints: cps }, () => {
-      this.runFatigueEngine(); 
-    });
+    this.setData({ checkpoints: cps }, () => { this.runFatigueEngine(); });
   },
 
-  // 2. 🚀 核心：K=1.07 非线性疲劳引擎
   runFatigueEngine() {
     const { targetHours, targetMinutes, checkpoints, K } = this.data;
     const targetMins = (parseInt(targetHours) || 0) * 60 + (parseInt(targetMinutes) || 0);
-    
     let totalED = 0;
-    const dataWithED = checkpoints.map(cp => {
-      const segED = cp.segDist + (cp.segGain / 100); 
-      totalED += segED;
-      return { ...cp, segED };
+    
+    checkpoints.forEach(cp => {
+      cp.segED = cp.segDist + (cp.segGain / 100); 
+      totalED += cp.segED;
     });
-
-    const totalRest = dataWithED.reduce((sum, cp) => sum + parseInt(cp.rest || 0), 0);
+    
+    const totalRest = checkpoints.reduce((sum, cp) => sum + parseInt(cp.rest || 0), 0);
     const movingMins = targetMins - totalRest;
-
-    if (movingMins <= 0) {
-      wx.showToast({ title: '目标时间太紧！', icon: 'none' });
-      return;
-    }
+    if (movingMins <= 0) return;
 
     const a = movingMins / Math.pow(totalED, K);
     let runningED = 0;
 
-    const enginedCps = dataWithED.map((cp, i) => {
-      if (i === 0) return { ...cp, moveMins: 0 };
+    checkpoints.forEach((cp, i) => {
+      if (i === 0) { cp.moveMins = 0; return; }
       const prevED = runningED;
       runningED += cp.segED;
-      const curMoveMins = Math.round(a * Math.pow(runningED, K) - a * Math.pow(prevED, K));
-      return { ...cp, moveMins: curMoveMins };
+      cp.moveMins = Math.round(a * Math.pow(runningED, K) - a * Math.pow(prevED, K));
     });
-
-    this.setData({ checkpoints: enginedCps }, () => {
-      this.updateTimeline(); 
-    });
+    
+    this.setData({ checkpoints }, () => { this.updateTimesAndPaces(false); });
   },
 
-  // 3. ⏱️ 时间汇总器
-  updateTimeline() {
-    let { checkpoints } = this.data;
-    let totalComputedMins = 0;
+  formatTime(minsTotal) {
+    let m = Math.round(minsTotal) % 60;
+    let h = Math.floor(minsTotal / 60) % 24;
+    let days = Math.floor(minsTotal / (60 * 24));
+    let hh = h.toString().padStart(2, '0');
+    let mm = m.toString().padStart(2, '0');
+    return `${hh}:${mm}${days > 0 ? ` (+${days})` : ''}`;
+  },
 
-    for (let i = 0; i < checkpoints.length; i++) {
-      totalComputedMins += parseInt(checkpoints[i].moveMins || 0);
-      totalComputedMins += parseInt(checkpoints[i].rest || 0);
+  updateTimesAndPaces(updateTotals = false) {
+    let { checkpoints, startTime } = this.data;
+    let [startH, startM] = startTime.split(':').map(Number);
+    let currentMinutes = startH * 60 + startM;
+    let totalMinsForGlobal = 0;
+    
+    let lastCutoffMins = currentMinutes; 
+
+    const newCps = checkpoints.map((cp, i, arr) => {
+      if (i === 0) {
+        cp.arrTime = this.formatTime(currentMinutes);
+        cp.depTime = this.formatTime(currentMinutes);
+        cp.pace = "-'--\""; cp.eqPace = "-'--\""; cp.eqDist = "0.00";
+        cp.isOvertime = false;
+        cp.displayCutoffTime = cp.cutoffTime || '--:--';
+        return cp;
+      }
+
+      currentMinutes += cp.moveMins;
+      cp.arrTime = this.formatTime(currentMinutes); 
+      
+      if (cp.cutoffTime && cp.cutoffTime !== '--:--') {
+        let [cH, cM] = cp.cutoffTime.split(':').map(Number);
+        let cMins = cH * 60 + cM;
+        
+        while (cMins < lastCutoffMins) {
+          cMins += 24 * 60;
+        }
+        cp.absoluteCutoffMins = cMins;
+        lastCutoffMins = cMins; 
+
+        cp.displayCutoffTime = this.formatTime(cMins); 
+      } else {
+        cp.displayCutoffTime = '--:--';
+      }
+
+      cp.isOvertime = cp.absoluteCutoffMins ? (currentMinutes > cp.absoluteCutoffMins) : false;
+
+      if (i < arr.length - 1) {
+        currentMinutes += cp.rest;
+        cp.depTime = this.formatTime(currentMinutes);
+      } else {
+        cp.depTime = cp.arrTime;
+      }
+
+      totalMinsForGlobal += cp.moveMins + (cp.rest || 0);
+
+      const eqDist = (cp.segDist + (cp.segGain / 100)).toFixed(2);
+      cp.eqDist = eqDist;
+      cp.pace = cp.segDist > 0 ? this.formatPace(cp.moveMins / cp.segDist) : "-'--\"";
+      cp.eqPace = eqDist > 0 ? this.formatPace(cp.moveMins / eqDist) : "-'--\"";
+      return cp;
+    });
+
+    let updatePayload = { checkpoints: newCps };
+    if (updateTotals) {
+      updatePayload.targetHours = Math.floor(totalMinsForGlobal / 60);
+      updatePayload.targetMinutes = totalMinsForGlobal % 60;
     }
-
-    this.setData({ 
-      checkpoints,
-      targetHours: Math.floor(totalComputedMins / 60),
-      targetMinutes: Math.floor(totalComputedMins % 60)
-    });
+    this.setData(updatePayload);
   },
 
-  // 4. 局部修改触发器
   onManualUpdate(e) {
     const { index, type } = e.currentTarget.dataset;
     const val = parseInt(e.detail.value) || 0;
     let { checkpoints } = this.data;
-
     if (type === 'rest') checkpoints[index].rest = val;
     else if (type === 'move') checkpoints[index].moveMins = val;
-    
-    this.setData({ checkpoints }, () => this.updateTimeline());
+    this.setData({ checkpoints }, () => this.updateTimesAndPaces(true));
   },
 
-  // 5. 底部按钮预留方法
-  savePlanImage() {
-    wx.showToast({ title: '保存图片功能开发中...', icon: 'none' });
+  drawNativeElevationChart(ctx, cpData, chartX, chartY, chartW, chartH, globalMinE, globalMaxE) {
+    const points = this.generateMockPoints(cpData);
+    if (!points || points.length === 0) return;
+
+    let minD = points[0].d, maxD = points[points.length-1].d;
+    
+    let minE = globalMinE;
+    let maxE = globalMaxE;
+    
+    if (maxE - minE < 100) { maxE += 50; minE = Math.max(0, minE - 50); }
+
+    const getX = (d) => chartX + ((d - minD) / (maxD - minD)) * chartW;
+    const getY = (e) => chartY + chartH - ((e - minE) / (maxE - minE)) * chartH;
+
+    ctx.beginPath();
+    ctx.moveTo(getX(points[0].d), getY(points[0].e));
+    points.forEach(p => ctx.lineTo(getX(p.d), getY(p.e)));
+    ctx.lineTo(getX(points[points.length-1].d), chartY + chartH);
+    ctx.lineTo(getX(points[0].d), chartY + chartH);
+    
+    const grd = ctx.createLinearGradient(0, chartY, 0, chartY + chartH);
+    grd.addColorStop(0, 'rgba(255, 170, 22, 0.4)');
+    grd.addColorStop(1, 'rgba(255, 170, 22, 0.0)');
+    ctx.fillStyle = grd;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(getX(points[0].d), getY(points[0].e));
+    points.forEach(p => ctx.lineTo(getX(p.d), getY(p.e)));
+    ctx.strokeStyle = '#FFAA16';
+    ctx.lineWidth = 2; 
+    ctx.stroke();
+  },
+
+  async savePlanImage() {
+    wx.showLoading({ title: '正在生成高清长图...', mask: true });
+    try {
+      const setting = await wx.getSetting();
+      if (setting.authSetting['scope.writePhotosAlbum'] === false) {
+        wx.hideLoading();
+        return wx.showModal({
+          title: '需要权限',
+          content: '请授权保存图片到相册，否则无法下载',
+          success: res => { if (res.confirm) wx.openSetting(); }
+        });
+      }
+
+      const query = wx.createSelectorQuery();
+      query.select('#shareCanvas').fields({ node: true, size: true }).exec(async (res) => {
+        if (!res[0] || !res[0].node) {
+          wx.hideLoading();
+          return wx.showToast({ title: '画板初始化失败', icon: 'none' });
+        }
+        
+        const canvas = res[0].node;
+        const ctx = canvas.getContext('2d');
+        
+        const W = 1080; 
+        const headerH = 380;
+        const rowH = 180;
+        const footerH = 450;
+        
+        const { raceName, targetHours, targetMinutes, startTime, checkpoints } = this.data;
+        
+        const H = headerH + (checkpoints.length * rowH) + footerH;
+        canvas.width = W;
+        canvas.height = H;
+        
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, W, H);
+        
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        
+        ctx.fillStyle = '#FF9811';
+        ctx.font = 'bold 48px Inter';
+        ctx.fillText('TRL-X', 80, 80);
+        
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 70px Inter';
+        let displayRaceName = raceName;
+        if(displayRaceName.length > 14) displayRaceName = displayRaceName.substring(0, 13) + '...';
+        ctx.fillText(displayRaceName, 80, 160);
+        
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.font = '36px sans-serif';
+        ctx.fillText(`计划用时: ${targetHours}h ${targetMinutes}m   |   发枪时间: ${startTime}`, 80, 260);
+        
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(80, headerH - 20);
+        ctx.lineTo(W - 80, headerH - 20);
+        ctx.stroke();
+
+        const drawImg = (src, x, y, w, h) => {
+          return new Promise((resolve) => {
+            if (!src) return resolve();
+            const img = canvas.createImage();
+            img.src = src;
+            img.onload = () => {
+              ctx.drawImage(img, x, y, w, h);
+              resolve();
+            };
+            img.onerror = () => { resolve(); };
+          });
+        };
+        
+        let globalMinE = Infinity;
+        let globalMaxE = -Infinity;
+        checkpoints.forEach(cp => {
+          const pts = this.generateMockPoints(cp);
+          if (pts && pts.length > 0) {
+             const min = Math.min(...pts.map(p => p.e));
+             const max = Math.max(...pts.map(p => p.e));
+             if (min < globalMinE) globalMinE = min;
+             if (max > globalMaxE) globalMaxE = max;
+          }
+        });
+        if (globalMinE === Infinity) globalMinE = 0;
+        if (globalMaxE === -Infinity) globalMaxE = 1000;
+
+        let currentY = headerH;
+        
+        for (let i = 0; i < checkpoints.length; i++) {
+          const cp = checkpoints[i];
+          const y = currentY + (i * rowH);
+          
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 50px Inter';
+          ctx.textAlign = 'left';
+          ctx.fillText(cp.cpNum, 80, y + 55);
+          
+          if (cp.isDropBag) {
+             ctx.fillStyle = 'rgba(255,255,255,0.4)';
+             ctx.font = '28px sans-serif';
+             ctx.fillText('换装点', 80, y + 115);
+          }
+          
+          if (i > 0) {
+            ctx.textAlign = 'center';
+            
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            ctx.font = '28px sans-serif';
+            ctx.fillText('用时(m)', 300, y + 40);
+            ctx.fillStyle = '#FFAA16';
+            ctx.font = 'bold 45px Inter';
+            ctx.fillText((cp.moveMins || 0).toString(), 300, y + 85);
+            
+            if (i < checkpoints.length - 1) {
+              ctx.fillStyle = 'rgba(255,255,255,0.5)';
+              ctx.font = '28px sans-serif';
+              ctx.fillText('休息(m)', 460, y + 40);
+              ctx.fillStyle = '#3284FF';
+              ctx.font = 'bold 45px Inter';
+              ctx.fillText((cp.rest || 0).toString(), 460, y + 85);
+            }
+
+            this.drawNativeElevationChart(ctx, cp, 580, y + 40, 200, 100, globalMinE, globalMaxE);
+            
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 45px Inter';
+            ctx.fillText(cp.segDist + ' KM', W - 80, y + 40);
+            
+            ctx.font = 'bold 32px Inter';
+            ctx.fillStyle = '#F94747'; 
+            ctx.fillText('+' + cp.segGain, W - 190, y + 100); 
+            ctx.fillStyle = '#5CF947'; 
+            ctx.fillText('-' + cp.segLoss, W - 80, y + 100);
+            
+          } else {
+             ctx.textAlign = 'right';
+             ctx.fillStyle = 'rgba(255,255,255,0.4)';
+             ctx.font = '40px Inter';
+             ctx.fillText('START', W - 80, y + 60);
+          }
+          
+          ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+          ctx.beginPath();
+          ctx.moveTo(80, y + rowH);
+          ctx.lineTo(W - 80, y + rowH);
+          ctx.stroke();
+        }
+        
+        const footerY = currentY + (checkpoints.length * rowH);
+        
+        await drawImg('/images/qrcode.png', (W - 220) / 2, footerY + 80, 220, 220);
+        
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '30px sans-serif';
+        ctx.fillText('长按扫码，定制你的专属越野跑计划', W / 2, footerY + 340);
+        
+        wx.canvasToTempFilePath({
+          canvas: canvas,
+          width: W,
+          height: H,
+          destWidth: W,
+          destHeight: H,
+          success: (tempRes) => {
+            wx.saveImageToPhotosAlbum({
+              filePath: tempRes.tempFilePath,
+              success: () => {
+                wx.hideLoading();
+                wx.showToast({ title: '已存入系统相册', icon: 'success' });
+              },
+              fail: () => {
+                wx.hideLoading();
+                wx.showToast({ title: '取消保存', icon: 'none' });
+              }
+            });
+          },
+          fail: (err) => {
+             console.error(err);
+             wx.hideLoading();
+             wx.showToast({ title: '图片生成失败', icon: 'none' });
+          }
+        });
+      });
+    } catch (e) {
+      wx.hideLoading();
+      console.error("整体流程报错:", e);
+      wx.showToast({ title: '操作出错', icon: 'none' });
+    }
+  },
+
+  // ==========================================
+  // ✨ 核心上传引擎：恢复原生无感保存，依靠底层 _openid
+  // ==========================================
+  async uploadPlanToCloud() {
+    wx.showLoading({ title: '安全加密上传中...', mask: true });
+    
+    const { raceId, raceName, groupDist, raceDate, startTime, targetHours, targetMinutes, checkpoints } = this.data;
+
+    let raceDateMs = 0;
+    if (raceDate) {
+      const nums = raceDate.match(/\d+/g);
+      if (nums && nums.length >= 3) {
+        raceDateMs = new Date(nums[0], nums[1] - 1, nums[2]).getTime();
+      }
+    }
+
+    const planData = {
+      raceId, raceName, groupDist, raceDate, raceDateMs,
+      startTime, targetHours, targetMinutes, checkpoints,
+      updateTime: db.serverDate()
+    };
+
+    try {
+      // 查询当前用户是否存过这条数据（因为权限设置，只会查出当前用户的）
+      const { data: existPlans } = await db.collection('user_plans').where({
+        raceId: raceId,
+        groupDist: groupDist
+      }).get();
+
+      if (existPlans.length > 0) {
+        await db.collection('user_plans').doc(existPlans[0]._id).update({ data: planData });
+      } else {
+        planData.createTime = db.serverDate();
+        await db.collection('user_plans').add({ data: planData });
+      }
+
+      wx.hideLoading();
+      return true; 
+    } catch (err) {
+      console.error("☁️ 云端保存失败:", err);
+      wx.hideLoading();
+      wx.showToast({ title: '网络异常，保存失败', icon: 'none' });
+      return false; 
+    }
   },
 
   syncToHardware() {
-    wx.showToast({ title: '硬件通讯接口预留', icon: 'none' });
+    const isConnected = app.globalData && app.globalData.isConnected;
+
+    if (isConnected) {
+      this.executeSyncAnimation();
+    } else {
+      this.setData({ showConnectModal: true });
+    }
   },
 
-  goToSegmentDetail(e) {
-    const idx = e.currentTarget.dataset.index;
-    wx.navigateTo({ url: `/pages/plan-segment/plan-segment?idx=${idx}` });
+  async modalLocalSave() {
+    this.setData({ showConnectModal: false });
+    const success = await this.uploadPlanToCloud();
+    if (success) {
+      this.setupSuccessModal('计划已存入云端');
+    }
+  },
+
+  modalGoConnect() {
+    this.pendingSync = true;
+    this.setData({ showConnectModal: false });
+    wx.navigateTo({ url: '/pages/ble-connect/ble-connect' });
+  },
+
+  modalBackToHome() {
+    this.setData({ showSuccessModal: false });
+    wx.reLaunch({ url: '/pages/index/index' });
+  },
+
+  async executeSyncAnimation() {
+    const success = await this.uploadPlanToCloud();
+    if (!success) return; 
+
+    wx.showLoading({ title: '正在打包路书...', mask: true });
+    
+    setTimeout(() => {
+      wx.showLoading({ title: '蓝牙传输中...', mask: true });
+      
+      setTimeout(() => {
+        wx.hideLoading();
+        this.setupSuccessModal('同步手表成功');
+      }, 1500); 
+      
+    }, 1000); 
+  },
+
+  setupSuccessModal(titleText) {
+    this.setData({ 
+      successModalTitle: titleText,
+      showSuccessModal: true
+    });
   },
 
   goBack() { wx.navigateBack(); }

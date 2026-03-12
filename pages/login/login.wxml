@@ -1,44 +1,29 @@
-<view class="container">
+<view class="login-page">
+  <view class="back-btn" bindtap="goBack"><view class="arrow-left"></view></view>
   
-  <view class="custom-nav">
-    <view class="back-btn" bindtap="goBack"></view>
-    <text class="nav-title">{{isLoginMode ? '系统登录' : '创建账号'}}</text>
+  <view class="header-titles">
+    <text class="main-title">AST SYSTEM</text>
+    <text class="sub-title">硬核越野数据中枢</text>
   </view>
 
-  <view class="brand-header">
-    <view class="default-avatar">
-      <view class="inner-circle"></view>
-    </view>
-    <text class="brand-title">AST SYSTEM</text>
-    <text class="brand-subtitle">硬核越野数据中心</text>
+  <view class="tab-box">
+    <view class="tab {{isLoginMode ? 'active' : ''}}" bindtap="switchMode" data-mode="login">登录</view>
+    <view class="tab {{!isLoginMode ? 'active' : ''}}" bindtap="switchMode" data-mode="register">注册</view>
   </view>
 
-  <view class="auth-card">
-    
-    <view class="auth-tabs">
-      <view class="tab {{isLoginMode ? 'active' : ''}}" bindtap="switchMode" data-mode="login">登 录</view>
-      <view class="tab {{!isLoginMode ? 'active' : ''}}" bindtap="switchMode" data-mode="register">注 册</view>
-    </view>
-
-    <view class="form-group">
-      <view class="input-box">
-        <input placeholder="手机号 / 邮箱" placeholder-class="ph-color" type="text" />
-      </view>
-      <view class="input-box">
-        <input placeholder="请输入密码" placeholder-class="ph-color" password="true" />
-      </view>
-      <view class="input-box slide-down" wx:if="{{!isLoginMode}}">
-        <input placeholder="请再次确认密码" placeholder-class="ph-color" password="true" />
-      </view>
-    </view>
-
-    <view class="submit-btn" bindtap="submitAuth">
-      {{isLoginMode ? '进入系统' : '创建账号'}}
+  <view class="form-box">
+    <view class="input-group">
+      <text class="label">账号名称</text>
+      <input class="input-field" placeholder="请输入专属代号" placeholder-class="ph-style" model:value="{{username}}" />
     </view>
     
-    <view class="forgot-pwd" wx:if="{{isLoginMode}}">
-      <text>忘记密码？</text>
+    <view class="input-group">
+      <text class="label">访问密码</text>
+      <input class="input-field" password="true" placeholder="请输入密钥" placeholder-class="ph-style" model:value="{{password}}" />
     </view>
+  </view>
 
+  <view class="submit-btn" bindtap="handleSubmit">
+    {{isLoginMode ? '验证身份 / LOGIN' : '创建档案 / REGISTER'}}
   </view>
 </view>

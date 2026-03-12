@@ -1,4 +1,4 @@
-<view class="container">
+<scroll-view class="container" scroll-y="true">
   
   <block wx:if="{{!isConnected}}">
     <view class="header-section" bindtap="goToConnect">
@@ -34,10 +34,35 @@
   <view class="list-section">
     <view class="section-header">
       <text class="section-title">已导入的 比赛与计划</text>
+      <text class="view-more" bindtap="goToMorePlans" wx:if="{{myPlans.length > 0}}">查看更多</text>
     </view>
-    <view class="empty-card">
+    
+    <view class="empty-card" wx:if="{{myPlans.length === 0}}">
       <text class="empty-text">未导入 比赛与计划</text>
     </view>
+
+    <block wx:else>
+      <view class="my-plan-card">
+        <block wx:for="{{myPlans}}" wx:key="_id" wx:if="{{index < 3}}">
+          <view class="plan-row" bindtap="goToMyPlan" data-id="{{item._id}}">
+            <view class="plan-info-left">
+              <view class="plan-title-group">
+                <text class="plan-name">{{item.pureRaceName || item.raceName}}</text>
+                <view class="plan-group-tag" wx:if="{{item.groupDist}}">{{item.groupDist}}</view>
+              </view>
+              <text class="plan-date">{{item.raceDate}}</text>
+            </view>
+            <view class="plan-info-right">
+              <text class="plan-time">{{item.displayTime}}</text>
+              <text class="plan-countdown" wx:if="{{item.daysLeft > 0}}">剩余{{item.daysLeft}}天</text>
+              <text class="plan-countdown" wx:elif="{{item.daysLeft === 0}}">就是今天</text>
+            </view>
+            <view class="arrow-right-small dark-arrow"></view>
+          </view>
+          <view class="plan-divider" wx:if="{{index < 2 && index < myPlans.length - 1}}"></view>
+        </block>
+      </view>
+    </block>
   </view>
 
   <view class="list-section">
@@ -48,8 +73,7 @@
 
     <view class="race-list">
       <block wx:for="{{raceList}}" wx:key="id">
-        <view class="race-card" bindtap="goToDetail" data-id="{{item.id}}">
-          
+        <view class="race-card" bindtap="goToDetail" data-id="{{item._id || item.id}}">
           <view class="card-header">
             <view class="name-group">
               <text class="race-name">{{item.name}}</text>
@@ -57,11 +81,8 @@
             </view>
             <view class="arrow-right-small"></view>
           </view>
-          
           <text class="race-date">{{item.date}}</text>
-          
           <text class="race-location">{{item.location}}</text>
-          
           <view class="tag-container">
             <block wx:for="{{item.tags}}" wx:for-item="tag" wx:key="index">
               <view class="distance-tag">
@@ -69,22 +90,21 @@
               </view>
             </block>
           </view>
-
         </view>
       </block>
     </view>
   </view>
 
-  <view class="custom-tabbar">
-    <view class="tab-item active">
-      <image class="tab-icon" src="/images/我的产品 LOGO.png" mode="aspectFit"></image>
-      <text class="tab-text">我的产品</text>
-    </view>
-    
-    <view class="tab-item" bindtap="goToProfile">
-      <image class="tab-icon" src="/images/个人中心 LOGO-1.png" mode="aspectFit"></image>
-      <text class="tab-text">个人中心</text>
-    </view>
-  </view>
+</scroll-view>
 
+<view class="custom-tabbar">
+  <view class="tab-item active">
+    <image class="tab-icon" src="/images/watch1.png" mode="aspectFit"></image>
+    <text class="tab-text">我的产品</text>
+  </view>
+  
+  <view class="tab-item" bindtap="goToProfile">
+    <image class="tab-icon" src="/images/people1.png" mode="aspectFit"></image>
+    <text class="tab-text">个人中心</text>
+  </view>
 </view>

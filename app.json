@@ -6,7 +6,10 @@
     "pages/race-list/race-list",
     "pages/ble-connect/ble-connect",
     "pages/login/login",
-    "pages/plan-result/plan-result"
+    "pages/plan-result/plan-result",
+    "pages/admin-race-add/admin-race-add",
+    "pages/admin-race-list/admin-race-list",
+    "pages/my-plans/my-plans"
   ],
   "window": {
     "backgroundTextStyle": "light",

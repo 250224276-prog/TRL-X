@@ -1,53 +1,210 @@
 <view class="plan-page">
-  <view class="header">
+  <view class="sticky-header">
     <view class="back-btn" bindtap="goBack"><view class="arrow-left"></view></view>
-    <view class="title-box">
-      <view class="race-name">{{raceName}}</view>
-      <view class="total-time">计划总用时: {{targetHours}}h {{targetMinutes}}min</view>
+    <view class="race-name">{{raceName}}</view>
+
+    <view class="config-grid">
+      <view class="config-item">
+        <text class="config-label">计划用时</text>
+        <picker mode="multiSelector" range="{{timeRange}}" value="{{timeIndex}}" bindchange="onTimeChange">
+          <view class="config-capsule"><text>{{targetHours}}h {{targetMinutes}}m</text></view>
+        </picker>
+      </view>
+      <view class="config-item">
+        <text class="config-label">发枪时间</text>
+        <picker mode="selector" range="{{availableStartTimes}}" disabled="{{availableStartTimes.length <= 1}}" bindchange="onStartChange">
+          <view class="config-capsule" style="{{availableStartTimes.length <= 1 ? 'opacity: 0.7;' : ''}}"><text>{{startTime}}</text></view>
+        </picker>
+      </view>
+      <view class="config-item">
+        <text class="config-label">平均休息</text>
+        <picker mode="selector" range="{{restRange}}" value="{{restIndex}}" bindchange="onRestChange">
+          <view class="config-capsule"><text>{{globalRestMins}}m</text></view>
+        </picker>
+      </view>
     </view>
   </view>
 
   <scroll-view class="plan-scroll" scroll-y>
     <view class="cp-row" wx:for="{{checkpoints}}" wx:key="index">
       <view class="click-mask" bindtap="goToSegmentDetail" data-index="{{index}}"></view>
-
+      
       <view class="cp-name-box">
-        <text class="cp-name">{{item.name}}</text>
+        <text class="cp-name">{{item.cpNum}}</text>
         <text class="dp-tag" wx:if="{{item.isDropBag}}">换装点</text>
       </view>
 
       <view class="ctrl-group pos-move" wx:if="{{index > 0}}" catchtap="return">
         <text class="ctrl-label">计划用时(m)</text>
-        <view class="ctrl-box text-orange">
-          <input type="number" value="{{item.moveMins}}" data-index="{{index}}" data-type="move" bindblur="onManualUpdate" />
+        <view class="ctrl-box">
+          <input class="{{item.isOvertime ? 'text-red' : 'text-orange'}}" type="number" value="{{item.moveMins}}" data-index="{{index}}" data-type="move" bindblur="onManualUpdate" />
         </view>
       </view>
 
-      <view class="ctrl-group pos-rest" wx:if="{{index < checkpoints.length - 1}}" catchtap="return">
+      <view class="ctrl-group pos-rest" wx:if="{{index > 0 && index < checkpoints.length - 1}}" catchtap="return">
         <text class="ctrl-label">休息(m)</text>
-        <view class="ctrl-box text-blue">
-          <input type="number" value="{{item.rest}}" data-index="{{index}}" data-type="rest" bindblur="onManualUpdate" />
+        <view class="ctrl-box">
+          <input class="text-blue" type="number" value="{{item.rest}}" data-index="{{index}}" data-type="rest" bindblur="onManualUpdate" />
         </view>
       </view>
 
-      <view class="vector-51"></view> 
+      <view class="elevation-box" wx:if="{{index > 0 && item.svgProfile}}">
+        <view class="elevation-svg" style="background-image: url('{{item.svgProfile}}');"></view>
+      </view>
       
-      <view class="stats">
+      <view class="stats" wx:if="{{index > 0}}">
         <view class="dist-val">{{item.segDist}}KM</view>
         <view class="gain-loss">
           <text class="val-up">+{{item.segGain}}</text>
           <text class="val-down">-{{item.segLoss}}</text>
         </view>
       </view>
-
       <view class="row-divider"></view>
     </view>
-    
+
     <view class="bottom-action-bar">
-      <view class="btn btn-save" bindtap="savePlanImage">保存计划表</view>
+      <view class="btn btn-save" bindtap="savePlanImage">保存图片</view>
       <view class="btn btn-sync" bindtap="syncToHardware">同步至手表</view>
     </view>
-    
     <view style="height: 80rpx;"></view> 
   </scroll-view>
+
+  <view class="modal-mask" wx:if="{{showDetail}}" bindtap="closeDetail" catchtouchmove="preventTouchMove"></view>
+  <view class="detail-sheet {{showDetail ? 'show' : ''}}">
+    
+    <view class="ds-drag-area" bindtouchstart="onTouchStart" bindtouchend="onTouchEnd" data-type="dragArea" catchtouchmove="preventTouchMove">
+      <view class="pull-handle"></view>
+      <view class="ds-top-bar">
+        <view class="ds-close-circle" bindtap="closeDetail">
+          <view class="ds-cross1"></view>
+          <view class="ds-cross2"></view>
+        </view>
+        <view class="ds-total-capsule">
+          <text>计划总用时:{{targetHours}}h {{targetMinutes}}min</text>
+        </view>
+      </view>
+    </view>
+
+    <swiper class="detail-swiper" current="{{detailCurrent}}" bindchange="onDetailSwiperChange">
+      <swiper-item wx:for="{{checkpoints}}" wx:key="index" wx:if="{{index > 0}}">
+        <scroll-view class="ds-scroll" scroll-y bindscroll="onScroll" bindtouchstart="onTouchStart" bindtouchend="onTouchEnd" data-type="scrollView">
+          
+          <view class="ds-title-row">
+            <text class="ds-cp-main">{{item.cpNum}}</text>
+            <text class="ds-cp-sub" wx:if="{{item.locName}}">{{item.locName}}</text>
+          </view>
+
+          <view class="ds-title-divider"></view>
+
+          <view class="ds-stats-header">
+            <view class="ds-stats-left">
+              <text class="ds-dist-large">{{item.segDist}}km</text>
+              <text class="ds-elev-up">↑{{item.segGain}}m</text>
+              <text class="ds-elev-down">↓{{item.segLoss}}m</text>
+            </view>
+            <view class="ds-stats-right">
+              <text class="ds-cutoff-lbl">关门时间</text>
+              <text class="ds-cutoff-val {{item.isOvertime ? 'text-red' : ''}}">{{item.displayCutoffTime || item.cutoffTime || '--:--'}}</text> 
+            </view>
+          </view>
+
+          <view class="ds-chart-area">
+            <canvas type="2d" id="elevChart_{{index}}" class="elev-canvas"
+                    catchtouchstart="onChartTouch" 
+                    catchtouchmove="onChartTouch" 
+                    catchtouchend="onChartTouchEnd"></canvas>
+            <view class="chart-loading" wx:if="{{!chartReady[index]}}">正在渲染地形雷达...</view>
+          </view>
+
+          <view class="ds-grid">
+            <view class="ds-grid-row">
+              <view class="ds-grid-cell">
+                <text class="ds-cell-lbl">总距离</text>
+                <text class="ds-cell-val">{{checkpoints[index-1].accDist}}km-{{item.accDist}}km</text>
+              </view>
+              <view class="ds-grid-gap"></view>
+              <view class="ds-grid-cell">
+                <text class="ds-cell-lbl">等强距离</text>
+                <text class="ds-cell-val">{{item.eqDist}}KM</text>
+              </view>
+            </view>
+
+            <view class="ds-grid-row">
+              <view class="ds-grid-cell">
+                <text class="ds-cell-lbl">平均配速</text>
+                <text class="ds-cell-val">{{item.pace}}</text>
+              </view>
+              <view class="ds-grid-gap"></view>
+              <view class="ds-grid-cell">
+                <text class="ds-cell-lbl">平均等强配速</text>
+                <text class="ds-cell-val">{{item.eqPace}}</text>
+              </view>
+            </view>
+
+            <view class="ds-grid-row">
+              <view class="ds-grid-cell">
+                <text class="ds-cell-lbl">计划到达</text>
+                <text class="ds-cell-val {{item.isOvertime ? 'text-red' : ''}}">{{item.arrTime}}</text>
+              </view>
+              <view class="ds-grid-gap"></view>
+              <view class="ds-grid-cell">
+                <text class="ds-cell-lbl">计划离开</text>
+                <text class="ds-cell-val">{{item.depTime}}</text>
+              </view>
+            </view>
+          </view>
+
+          <view class="ds-inputs-row">
+            <view class="ds-input-col">
+              <text class="ds-input-lbl">计划用时</text>
+              <view class="ds-input-capsule">
+                <input class="{{item.isOvertime ? 'text-red' : 'txt-orange'}}" type="number" value="{{item.moveMins}}" data-index="{{index}}" data-type="move" bindblur="onManualUpdate" />
+                <text class="ds-unit {{item.isOvertime ? 'text-red' : 'txt-orange'}}">min</text>
+              </view>
+            </view>
+            <view class="ds-input-col">
+              <text class="ds-input-lbl">休息时间</text>
+              <view class="ds-input-capsule">
+                <input class="txt-blue" type="number" value="{{item.rest}}" data-index="{{index}}" data-type="rest" bindblur="onManualUpdate" />
+                <text class="txt-blue ds-unit">min</text>
+              </view>
+            </view>
+          </view>
+
+          <view class="ds-divider"></view>
+
+          <view class="ds-memo-wrapper">
+            <text class="ds-input-lbl" style="text-align: left;">休息备忘录</text>
+            <view class="ds-memo-box">
+              <textarea placeholder="点击添加备忘 (例如: 吃盐丸、换袜子)..." placeholder-class="ph-color" cursor-spacing="40" />
+            </view>
+          </view>
+
+          <view style="height: 120rpx;"></view>
+        </scroll-view>
+      </swiper-item>
+    </swiper>
+  </view>
+
+  <canvas type="2d" id="shareCanvas" class="share-canvas"></canvas>
+
+  <view class="custom-modal-mask" wx:if="{{showConnectModal || showSuccessModal}}" catchtouchmove="preventTouchMove"></view>
+
+  <view class="trl-modal-box {{showConnectModal ? 'show' : ''}}" catchtouchmove="preventTouchMove">
+    <text class="trl-modal-title">设备未连接</text>
+    <text class="trl-modal-content">当前未连接手表。\n您可以去连接设备，或者仅将计划上传至云端库。</text>
+    <view class="trl-modal-btns">
+      <view class="trl-btn-secondary" bindtap="modalLocalSave">仅存云端</view>
+      <view class="trl-btn-primary" bindtap="modalGoConnect">去连接</view>
+    </view>
+  </view>
+
+  <view class="trl-modal-box {{showSuccessModal ? 'show' : ''}}" catchtouchmove="preventTouchMove">
+    <text class="trl-modal-title text-green">操作成功</text>
+    <text class="trl-modal-content">{{successModalTitle}}\n路书数据已就绪，祝您安全完赛！🚀</text>
+    <view class="trl-modal-btns">
+      <view class="trl-btn-primary full-width" bindtap="modalBackToHome">返回主页</view>
+    </view>
+  </view>
+
 </view>
