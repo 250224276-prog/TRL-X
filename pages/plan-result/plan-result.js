@@ -290,13 +290,20 @@ Page({
     const rests = [];
     for(let i=1; i<=30; i++) rests.push(i + 'm');
 
-    const h = parseInt(options.h) || 21;
-    const m = parseInt(options.m) || 43;
+    let h = parseInt(options.h);
+    let m = parseInt(options.m);
+
+    // ✨ 核心修复：如果传了小时没传分钟，分钟默认给 0！只有都没传才给 21:43
+    let finalH = isNaN(h) ? 21 : h;
+    let finalM = isNaN(m) ? (isNaN(h) ? 43 : 0) : m; 
 
     this.setData({
-      targetHours: h, targetMinutes: m,
-      timeRange: [hours, mins], timeIndex: [h, m],
-      restRange: rests, restIndex: 4 
+      targetHours: finalH, 
+      targetMinutes: finalM,
+      timeRange: [hours, mins], 
+      timeIndex: [finalH, finalM],
+      restRange: rests, 
+      restIndex: 4 
     });
 
     const eventChannel = this.getOpenerEventChannel();
@@ -305,6 +312,11 @@ Page({
     if(eventChannel && eventChannel.on) {
       eventChannel.on('acceptDataFromOpenerPage', (data) => {
         hasReceivedDataFromOpener = true; 
+        
+        // 防御性编程：如果从事件通道里传了时间参数，优先覆盖
+        if (data.targetHours !== undefined && data.targetHours !== null) finalH = parseInt(data.targetHours);
+        if (data.targetMinutes !== undefined && data.targetMinutes !== null) finalM = parseInt(data.targetMinutes);
+
         const availableTimes = data.availableStartTimes || [data.startTime || '07:00'];
         this.setData({ 
           raceId: data.raceId || '',
@@ -312,7 +324,11 @@ Page({
           groupDist: data.groupDist || '',
           raceName: data.name || '越野赛', 
           startTime: data.startTime || '07:00',
-          availableStartTimes: availableTimes
+          availableStartTimes: availableTimes,
+          // 更新界面的时间
+          targetHours: finalH,
+          targetMinutes: finalM,
+          timeIndex: [finalH, finalM]
         });
         this.initData(data.checkpoints);
       });
@@ -377,12 +393,25 @@ Page({
       let defaultRest = (i === 0 || i === arr.length - 1) ? 0 : (isDropBag ? 30 : this.data.globalRestMins);
       
       let cpNum = i === 0 ? '起点' : (i === arr.length - 1 ? '终点' : `CP${i}`);
-      let locName = cp.name;
+      let locName = cp.name || '';
       
+      let segCutoffMins = null;
+      let cutoffTime = cp.cutoffTime || '';
+
       if (locName.includes('-')) {
         let parts = locName.split('-');
         cpNum = parts[0] || cpNum;
-        locName = parts.slice(1).join('-') || ''; 
+        
+        let lastPart = parts[parts.length - 1].trim();
+        if (/^\d+$/.test(lastPart)) {
+          segCutoffMins = parseInt(lastPart, 10);
+          locName = parts.slice(1, parts.length - 1).join('-');
+        } else if (/^\d{1,2}:\d{2}$/.test(lastPart)) {
+          cutoffTime = lastPart;
+          locName = parts.slice(1, parts.length - 1).join('-');
+        } else {
+          locName = parts.slice(1).join('-');
+        }
       } else if (locName.includes('～')) {
         let parts = locName.split('～');
         cpNum = parts[0] || cpNum;
@@ -401,7 +430,8 @@ Page({
         moveMins: 0,
         startEle: i > 0 ? Math.round(arr[i-1].tempEle || 0) : 0,
         endEle: Math.round(cp.tempEle || 0),
-        cutoffTime: cp.cutoffTime || '' 
+        segCutoffMins: segCutoffMins, 
+        cutoffTime: cutoffTime        
       };
     });
     this.setData({ checkpoints: cps }, () => { this.runFatigueEngine(); });
@@ -423,12 +453,19 @@ Page({
 
     const a = movingMins / Math.pow(totalED, K);
     let runningED = 0;
+    let runningAccumulatedMins = 0; // ✨ 新增累计器：彻底消除多段四舍五入带来的堆叠误差
 
     checkpoints.forEach((cp, i) => {
       if (i === 0) { cp.moveMins = 0; return; }
-      const prevED = runningED;
       runningED += cp.segED;
-      cp.moveMins = Math.round(a * Math.pow(runningED, K) - a * Math.pow(prevED, K));
+      
+      // 计算从起点到当前点的精确总移动时间，然后再做四舍五入
+      let exactMinsSoFar = a * Math.pow(runningED, K);
+      let roundedMinsSoFar = Math.round(exactMinsSoFar);
+      
+      // 当前赛段的时间 = 历史精确总时间 - 之前所有赛段实际分配掉的时间
+      cp.moveMins = roundedMinsSoFar - runningAccumulatedMins;
+      runningAccumulatedMins = roundedMinsSoFar;
     });
     
     this.setData({ checkpoints }, () => { this.updateTimesAndPaces(false); });
@@ -692,13 +729,18 @@ Page({
     return result;
   },
 
+  // ==========================================
+  // ✨ 核心修改 2：动态计算关门时间
+  // ==========================================
   updateTimesAndPaces(updateTotals = false) {
     let { checkpoints, startTime } = this.data;
     let [startH, startM] = startTime.split(':').map(Number);
-    let currentMinutes = startH * 60 + startM;
+    let startMins = startH * 60 + startM; // 记录起点出发时的绝对分钟数
+    let currentMinutes = startMins;
     let totalMinsForGlobal = 0;
     
-    let lastCutoffMins = currentMinutes; 
+    let lastCutoffMins = startMins; 
+    let runningCutoffMins = startMins; // 累加器：用于叠加赛段时长
 
     const newCps = checkpoints.map((cp, i, arr) => {
       if (i === 0) {
@@ -716,22 +758,31 @@ Page({
       cp.arrAbsoluteMins = currentMinutes;
       cp.arrTime = this.formatTime(currentMinutes); 
       
-      if (cp.cutoffTime && cp.cutoffTime !== '--:--') {
+      // 🌟 动态推算关门时刻 🌟
+      if (cp.segCutoffMins !== null && cp.segCutoffMins !== undefined) {
+        runningCutoffMins += cp.segCutoffMins;
+        cp.absoluteCutoffMins = runningCutoffMins;
+        cp.displayCutoffTime = this.formatTime(runningCutoffMins);
+        lastCutoffMins = runningCutoffMins; // 同步给旧逻辑防止混用报错
+      } 
+      else if (cp.cutoffTime && cp.cutoffTime !== '--:--') {
         let [cH, cM] = cp.cutoffTime.split(':').map(Number);
         let cMins = cH * 60 + cM;
         
         while (cMins < lastCutoffMins) {
-          cMins += 24 * 60;
+          cMins += 24 * 60; // 跨天处理
         }
         cp.absoluteCutoffMins = cMins;
         lastCutoffMins = cMins; 
-
+        runningCutoffMins = cMins; 
         cp.displayCutoffTime = this.formatTime(cMins); 
-      } else {
+      } 
+      else {
         cp.absoluteCutoffMins = null;
         cp.displayCutoffTime = '--:--';
       }
 
+      // 超时判定
       cp.isOvertime = Number.isFinite(cp.absoluteCutoffMins)
         ? (currentMinutes > cp.absoluteCutoffMins)
         : false;
@@ -1000,9 +1051,6 @@ Page({
     }
   },
 
-  // ==========================================
-  // ✨ 核心上传引擎：恢复原生无感保存，依靠底层 _openid
-  // ==========================================
   async uploadPlanToCloud() {
     wx.showLoading({ title: '安全加密上传中...', mask: true });
     
@@ -1033,7 +1081,6 @@ Page({
     };
 
     try {
-      // 查询当前用户是否存过这条数据（因为权限设置，只会查出当前用户的）
       const { data: existPlans } = await db.collection('user_plans').where({
         raceId: raceId,
         groupDist: groupDist

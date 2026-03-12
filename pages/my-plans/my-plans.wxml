@@ -21,22 +21,41 @@
     <view class="list-section" wx:if="{{displayList.length > 0}}">
       <view class="my-plan-card">
         <block wx:for="{{displayList}}" wx:key="_id">
-          <view class="plan-row" bindtap="goToMyPlan" data-id="{{item._id}}">
-            <view class="plan-info-left">
-              <view class="plan-title-group">
-                <text class="plan-name">{{item.pureRaceName || item.raceName}}</text>
-                <view class="plan-group-tag" wx:if="{{item.groupDist}}">{{item.groupDist}}</view>
+          
+          <view class="swipe-item">
+            <view class="swipe-wrapper" 
+                  style="transform: translateX({{item.slideX || 0}}px);"
+                  bindtouchstart="onTouchStart" 
+                  bindtouchmove="onTouchMove" 
+                  bindtouchend="onTouchEnd" 
+                  data-index="{{index}}">
+              
+              <view class="plan-content">
+                <view class="plan-row" bindtap="goToMyPlan" data-index="{{index}}" data-id="{{item._id}}">
+                  <view class="plan-info-left">
+                    <view class="plan-title-group">
+                      <text class="plan-name">{{item.pureRaceName || item.raceName}}</text>
+                      <view class="plan-group-tag" wx:if="{{item.groupDist}}">{{item.groupDist}}</view>
+                    </view>
+                    <text class="plan-date">{{item.raceDate}}</text>
+                  </view>
+                  <view class="plan-info-right">
+                    <text class="plan-time">{{item.displayTime}}</text>
+                    <text class="plan-countdown" wx:if="{{currentTab === 'future' && item.daysLeft > 0}}">剩余{{item.daysLeft}}天</text>
+                    <text class="plan-countdown" wx:elif="{{currentTab === 'future' && item.daysLeft === 0}}">就是今天</text>
+                    <text class="plan-countdown history-text" wx:elif="{{currentTab === 'history'}}">已完赛</text>
+                  </view>
+                  <view class="arrow-right-small dark-arrow"></view>
+                </view>
               </view>
-              <text class="plan-date">{{item.raceDate}}</text>
+
+              <view class="delete-btn" catchtap="deletePlan" data-id="{{item._id}}">
+                <text>删除</text>
+              </view>
+
             </view>
-            <view class="plan-info-right">
-              <text class="plan-time">{{item.displayTime}}</text>
-              <text class="plan-countdown" wx:if="{{currentTab === 'future' && item.daysLeft > 0}}">剩余{{item.daysLeft}}天</text>
-              <text class="plan-countdown" wx:elif="{{currentTab === 'future' && item.daysLeft === 0}}">就是今天</text>
-              <text class="plan-countdown history-text" wx:elif="{{currentTab === 'history'}}">已完赛</text>
-            </view>
-            <view class="arrow-right-small dark-arrow"></view>
           </view>
+          
           <view class="plan-divider" wx:if="{{index < displayList.length - 1}}"></view>
         </block>
       </view>

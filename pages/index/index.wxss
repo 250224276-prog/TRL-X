@@ -404,3 +404,12 @@ page {
   font-weight: 500;
   color: #FFFFFF;
 }
+/* ========================================== */
+/* ✨ 隐藏极其丑陋的滚动条 */
+/* ========================================== */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  color: transparent;
+  display: none;
+}

@@ -1,36 +1,55 @@
-// 获取云端数据库引用
 const db = wx.cloud.database();
 
 Page({
   data: {
-    raceList: []
+    statusBarHeight: 20,
+    allRaces: [],       
+    groupedRaces: [],   
+    searchKeyword: '',  
+
+    // 筛选面板相关状态
+    showFilter: false,
+    activeFilterCount: 0, 
+    
+    // ✨ 地区展示文案，单独拎出来维护
+    regionDisplayText: '', 
+
+    // 用户的选择暂存区
+    filterOptions: {
+      itra: 'all',       
+      distance: 'all',   
+      region: [],        
+      startDate: '',     
+      endDate: '',
+      sort: 'asc'        
+    }
   },
 
   onLoad(options) {
+    const sysInfo = wx.getSystemInfoSync();
+    this.setData({ statusBarHeight: sysInfo.statusBarHeight });
+
     this.fetchCloudRaces();
   },
 
-  // 核心拉取数据的函数
   fetchCloudRaces() {
     wx.showLoading({ title: '加载赛事中...', mask: true });
 
     db.collection('races').get({
       success: res => {
-        // 按时间早晚排序
-        let sortedRaces = res.data.sort((a, b) => {
-          const parseTime = (dateStr) => {
-            if (!dateStr) return 0;
-            const nums = dateStr.match(/\d+/g); 
-            if (nums && nums.length >= 3) {
-              return new Date(nums[0], nums[1] - 1, nums[2]).getTime();
-            }
-            return 0; 
-          };
-          return parseTime(a.date) - parseTime(b.date);
+        let races = res.data;
+        
+        races.forEach(race => {
+          race.timeMs = this.parseTime(race.date);
         });
 
-        this.setData({ raceList: sortedRaces });
-        wx.hideLoading();
+        // 默认按时间从近到远排序
+        races.sort((a, b) => a.timeMs - b.timeMs);
+
+        this.setData({ allRaces: races }, () => {
+          this.applyFilters();
+          wx.hideLoading();
+        });
       },
       fail: err => {
         console.error("❌ 列表页拉取失败：", err);
@@ -40,15 +59,201 @@ Page({
     });
   },
 
-  goBack() {
-    wx.navigateBack();
+  parseTime(dateStr) {
+    if (!dateStr) return 0;
+    const nums = dateStr.match(/\d+/g); 
+    if (nums && nums.length >= 3) {
+      return new Date(nums[0], nums[1] - 1, nums[2]).getTime();
+    }
+    return 0; 
   },
 
-  // 点击卡片进入详情页
-  goToDetail(e) {
-    const raceId = e.currentTarget.dataset.id;
-    wx.navigateTo({
-      url: `/pages/race-detail/race-detail?id=${raceId}`
+  // ==========================================
+  // ✨ 核心过滤引擎 
+  // ==========================================
+  applyFilters() {
+    const { allRaces, searchKeyword, filterOptions } = this.data;
+    let filteredList = [...allRaces];
+
+    // 1. 过滤搜索词
+    if (searchKeyword.trim() !== '') {
+      const kw = searchKeyword.trim().toLowerCase();
+      filteredList = filteredList.filter(race => {
+        const nameMatch = (race.name || '').toLowerCase().includes(kw);
+        const locMatch = (race.location || '').toLowerCase().includes(kw);
+        return nameMatch || locMatch;
+      });
+    }
+
+    // 2. 过滤 ITRA
+    if (filterOptions.itra === 'yes') {
+      filteredList = filteredList.filter(race => race.hasItra === true);
+    }
+
+    // 3. 过滤 地区 (✨ 新增处理 "全部" 逻辑)
+    if (filterOptions.region && filterOptions.region.length > 0 && filterOptions.region[0] !== '全部') {
+      // 提取纯净地名（去掉省市等后缀增加容错率）
+      const prov = filterOptions.region[0].replace(/省|市|自治区/g, ''); 
+      const city = filterOptions.region[1] === '全部' ? '' : filterOptions.region[1].replace(/市|自治州|地区/g, '');
+      const dist = filterOptions.region[2] === '全部' ? '' : filterOptions.region[2].replace(/区|县|市/g, '');
+      
+      filteredList = filteredList.filter(race => {
+        const loc = race.location || '';
+        // 逻辑：如果选了区，必须包含区；没选区但选了市，必须包含市；都没选，则只需包含省份
+        if (dist) return loc.includes(dist);
+        if (city) return loc.includes(city);
+        return loc.includes(prov);
+      });
+    }
+
+    // 4. 过滤 距离 (精准匹配 >= 100)
+    if (filterOptions.distance !== 'all') {
+      filteredList = filteredList.filter(race => {
+        if (!race.tags || race.tags.length === 0) return false;
+        
+        return race.tags.some(tag => {
+          let numStr = tag.dist.replace(/[^\d]/g, ''); 
+          let distVal = parseInt(numStr) || 0;
+
+          if (filterOptions.distance === '0-30') return distVal < 30;
+          if (filterOptions.distance === '30-60') return distVal >= 30 && distVal < 60;
+          if (filterOptions.distance === '60-100') return distVal >= 60 && distVal < 100;
+          if (filterOptions.distance === '100+') return distVal >= 100; // 包含 100km
+          return false;
+        });
+      });
+    }
+
+    // 5. 过滤 自定义时间范围
+    if (filterOptions.startDate) {
+      let startMs = new Date(filterOptions.startDate).setHours(0, 0, 0, 0);
+      filteredList = filteredList.filter(race => race.timeMs >= startMs);
+    }
+    if (filterOptions.endDate) {
+      let endMs = new Date(filterOptions.endDate).setHours(23, 59, 59, 999);
+      filteredList = filteredList.filter(race => race.timeMs <= endMs);
+    }
+
+    // 6. 全局排序控制
+    if (filterOptions.sort === 'asc') {
+      filteredList.sort((a, b) => a.timeMs - b.timeMs); // 近到远
+    } else {
+      filteredList.sort((a, b) => b.timeMs - a.timeMs); // 远到近
+    }
+
+    // 将过滤后的数据送去分组渲染
+    this.groupAndRenderRaces(filteredList);
+  },
+
+  groupAndRenderRaces(list) {
+    let groups = {};
+
+    list.forEach(race => {
+      const dateObj = new Date(race.timeMs);
+      const year = dateObj.getFullYear();
+      const month = dateObj.getMonth() + 1;
+      
+      const groupKey = `${year}-${month}`;
+
+      if (!groups[groupKey]) {
+        groups[groupKey] = {
+           monthStr: `${month}月`,
+           yearStr: `${year}`,
+           races: []
+        };
+      }
+      groups[groupKey].races.push(race);
     });
+
+    let groupedArray = [];
+    for (let key in groups) {
+      groupedArray.push({
+        monthStr: groups[key].monthStr,
+        yearStr: groups[key].yearStr,
+        races: groups[key].races,
+        groupTimeMs: groups[key].races[0].timeMs 
+      });
+    }
+
+    // 组标题跟着用户的排序要求一起翻转
+    if (this.data.filterOptions.sort === 'asc') {
+      groupedArray.sort((a, b) => a.groupTimeMs - b.groupTimeMs);
+    } else {
+      groupedArray.sort((a, b) => b.groupTimeMs - a.groupTimeMs);
+    }
+
+    this.setData({ groupedRaces: groupedArray });
+  },
+
+  // ==========================================
+  // 面板与交互事件
+  // ==========================================
+  onSearchInput(e) {
+    this.setData({ searchKeyword: e.detail.value }, () => this.applyFilters());
+  },
+  clearSearch() {
+    this.setData({ searchKeyword: '' }, () => this.applyFilters());
+  },
+
+  openFilterPanel() { this.setData({ showFilter: true }); },
+  closeFilterPanel() { this.setData({ showFilter: false }); },
+  preventTouchMove() { return; },
+
+  selectItra(e) { this.setData({ 'filterOptions.itra': e.currentTarget.dataset.val }); },
+  selectDist(e) { this.setData({ 'filterOptions.distance': e.currentTarget.dataset.val }); },
+  selectSort(e) { this.setData({ 'filterOptions.sort': e.currentTarget.dataset.val }); }, 
+  
+  // ✨ 新增：对含有“全部”的地区数组进行优雅显示解析
+  onRegionChange(e) { 
+    const val = e.detail.value;
+    let displayText = '';
+
+    if (val[0] === '全部') {
+      displayText = '全国'; // 选了三个全部
+    } else if (val[1] === '全部') {
+      displayText = val[0]; // 只选了省份
+    } else if (val[2] === '全部') {
+      displayText = `${val[0]} ${val[1]}`; // 选了省市
+    } else {
+      displayText = `${val[0]} ${val[1]} ${val[2]}`; // 全选
+    }
+
+    this.setData({ 
+      'filterOptions.region': val,
+      regionDisplayText: displayText
+    }); 
+  },
+  
+  onStartDateChange(e) { this.setData({ 'filterOptions.startDate': e.detail.value }); },
+  onEndDateChange(e) { this.setData({ 'filterOptions.endDate': e.detail.value }); },
+
+  resetFilters() {
+    this.setData({
+      filterOptions: { itra: 'all', distance: 'all', region: [], startDate: '', endDate: '', sort: 'asc' },
+      regionDisplayText: ''
+    });
+  },
+
+  confirmFilters() {
+    let count = 0;
+    const opt = this.data.filterOptions;
+    if (opt.itra !== 'all') count++;
+    if (opt.distance !== 'all') count++;
+    // 如果第一项不是“全部”，说明确实设置了地区筛选
+    if (opt.region.length > 0 && opt.region[0] !== '全部') count++;
+    if (opt.startDate || opt.endDate) count++;
+    if (opt.sort !== 'asc') count++;
+
+    this.setData({ 
+      showFilter: false,
+      activeFilterCount: count
+    }, () => {
+      this.applyFilters();
+    });
+  },
+
+  goBack() { wx.navigateBack(); },
+  goToDetail(e) {
+    wx.navigateTo({ url: `/pages/race-detail/race-detail?id=${e.currentTarget.dataset.id}` });
   }
-})
+});

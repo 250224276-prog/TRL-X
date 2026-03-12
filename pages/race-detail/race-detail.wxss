@@ -4,7 +4,7 @@
 .container {
   min-height: 100vh;
   background-color: #000000;
-  padding: 0 40rpx 200rpx 40rpx; /* 底部加大了留白，防止被悬浮按钮挡住 */
+  padding: 0 40rpx 200rpx 40rpx;
   box-sizing: border-box;
   color: #FFFFFF;
 }
@@ -13,7 +13,7 @@
 /* 1. 顶部自定义导航 */
 /* ========================================== */
 .custom-nav {
-  height: 180rpx; /* 留出手机状态栏的空间 */
+  height: 180rpx;
   display: flex;
   align-items: flex-end;
   padding-bottom: 20rpx;
@@ -26,7 +26,7 @@
   border-left: 4rpx solid #FFFFFF;
   transform: rotate(45deg);
   margin-bottom: 10rpx;
-  padding: 10rpx; /* 增加点击区域 */
+  padding: 10rpx;
 }
 .nav-title {
   position: absolute;
@@ -52,7 +52,7 @@
   width: 220rpx;
   height: 220rpx;
   border-radius: 28rpx;
-  background: rgba(255, 255, 255, 0.2); /* 占位色 */
+  background: rgba(255, 255, 255, 0.2);
 }
 .header-info {
   flex: 1;
@@ -96,47 +96,71 @@
 }
 
 /* ========================================== */
-/* 3. 公里数选择器 (大灰框底座 + 胶囊按钮) */
+/* 3. ✨ 组别选择器 (带有滑动光块) */
 /* ========================================== */
 .distance-selector {
   margin-top: 40rpx;
-  width: 600rpx; /* 对应 Figma 的 300px */
-  height: 64rpx; /* 对应 Figma 的 32px */
-  background: rgba(255, 255, 255, 0.1); /* 一直存在的大灰框底座 */
-  border-radius: 32rpx; /* 对应 Figma 的 16px 大圆角 */
+  width: 600rpx; 
+  height: 68rpx;
+  background: rgba(255, 255, 255, 0.08); /* 加深底色突出光块 */
+  border-radius: 34rpx;
   display: flex;
   align-items: center;
+  position: relative; /* 供绝对定位的光块使用 */
+  overflow: hidden; /* 切掉光块的方角 */
+}
+
+.dist-slider-bg {
+  position: absolute;
+  height: 100%;
+  left: 0;
+  top: 0;
+  background: rgba(255, 255, 255, 0.15); /* 高亮光块 */
+  border-radius: 34rpx;
+  transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+  z-index: 1; /* 在文字底层 */
 }
 
 .dist-btn {
   flex: 1; 
-  height: 100%; 
+  height: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
   font-family: 'PingFang SC', sans-serif;
   font-size: 32rpx; 
-  font-weight: 500;
-  border-radius: 32rpx; 
-  transition: all 0.3s ease;
-}
-
-.dist-btn.active {
-  background: rgba(255, 255, 255, 0.15); /* 选中时出现的高亮胶囊色块 */
+  font-weight: 600; /* 加粗文字增加质感 */
+  position: relative;
+  z-index: 2; /* 浮在光块上层 */
+  transition: opacity 0.3s ease;
 }
 
 /* ========================================== */
-/* 4. Tab 切换 (比赛详细 / 制定计划) */
+/* 4. ✨ Tab 切换面板 (带有滑动光块) */
 /* ========================================== */
 .tab-switcher {
   margin-top: 30rpx;
   width: 400rpx; 
-  height: 64rpx; 
-  background: rgba(255, 255, 255, 0.1); 
-  border-radius: 32rpx; 
+  height: 68rpx; 
+  background: rgba(255, 255, 255, 0.08); 
+  border-radius: 34rpx; 
   display: flex;
   align-items: center;
   margin-bottom: 20rpx;
+  position: relative;
+  overflow: hidden;
+}
+
+.tab-slider-bg {
+  position: absolute;
+  width: 50%; /* 固定 2 个 Tab 所以是 50% */
+  height: 100%;
+  left: 0;
+  top: 0;
+  background: rgba(255, 255, 255, 0.15); 
+  border-radius: 34rpx;
+  transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+  z-index: 1;
 }
 
 .tab-item {
@@ -146,63 +170,64 @@
   justify-content: center;
   align-items: center;
   font-family: 'Hiragino Sans GB', sans-serif;
-  font-size: 30rpx; 
+  font-size: 28rpx; /* 字体稍微缩减更显精致 */
   font-weight: 600;
   color: #FFFFFF;
   opacity: 0.5;
-  border-radius: 32rpx; 
+  position: relative;
+  z-index: 2;
   transition: all 0.3s ease;
 }
 
 .tab-item.active {
-  opacity: 1; 
-  background: rgba(255, 255, 255, 0.15); 
+  opacity: 1;
 }
 
 /* ========================================== */
-/* 5. 内容区：比赛详细 */
+/* 5. 内容区：比赛详细 (✨ 紧凑版关键数据) */
 /* ========================================== */
 .content-detail {
   margin-top: 40rpx;
 }
 .section-title {
   font-family: 'Hiragino Sans GB', sans-serif;
-  font-size: 36rpx;
+  font-size: 34rpx;
   font-weight: 600;
   display: block;
-  margin-bottom: 30rpx;
+  margin-bottom: 24rpx; /* 收紧标题与卡片的间距 */
 }
 
-/* 关键数据卡片 */
+/* ✨ 高密度关键数据卡片 */
 .key-data-card {
   background: rgba(255, 255, 255, 0.11);
-  border-radius: 44rpx;
-  padding: 20rpx 40rpx;
-  margin-bottom: 60rpx;
+  border-radius: 32rpx; /* 圆角改小更凌厉 */
+  padding: 10rpx 40rpx; /* 收紧内边距 */
+  margin-bottom: 50rpx;
 }
 .data-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 30rpx 0;
-  border-bottom: 1rpx solid rgba(255, 255, 255, 0.2); 
+  padding: 24rpx 0; /* 行高收紧 */
+  border-bottom: 1rpx solid rgba(255, 255, 255, 0.1); /* 分割线变淡 */
 }
 .data-row.border-none {
   border-bottom: none; 
 }
 .data-label {
-  font-size: 30rpx;
-  font-weight: 600;
+  font-size: 26rpx; /* 弱化 Label 字号 */
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6); /* 降低透明度，建立层级 */
 }
 .data-value {
-  font-size: 32rpx;
-  font-weight: 500;
+  font-size: 28rpx; /* 适度缩小 Value 字号 */
+  font-weight: 600;
 }
 
 /* 详细地图图片 */
 .detail-map {
   width: 100%;
-  border-radius: 44rpx;
+  border-radius: 32rpx; /* 统一圆角 */
   background: rgba(255, 255, 255, 0.1);
   margin-bottom: 50rpx;
 }
@@ -223,7 +248,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  margin-bottom: 40rpx; /* 改小一点，把留白让给下面的发枪时间胶囊 */
+  margin-bottom: 40rpx; 
 }
 .input-wrap {
   display: flex;
@@ -254,20 +279,32 @@
   font-size: 50rpx;
   color: rgba(255, 255, 255, 0.3);
   margin: 0 40rpx;
-  margin-top: -50rpx; /* 微调冒号位置 */
+  margin-top: -50rpx; 
 }
 
-/* ✨ 发枪时间胶囊切换器 */
+/* ✨ 发枪时间胶囊 (带有滑动光块) */
 .capsule-container {
   display: flex;
-  background: rgba(255, 255, 255, 0.11);
-  border-radius: 44rpx;
-  height: 100rpx;
-  padding: 10rpx;
-  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 40rpx;
+  height: 80rpx; /* 取消了 padding，利用 height 撑起结构 */
   width: 100%;
-  margin-bottom: 120rpx; /* 给底部悬浮按钮留出空间 */
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 120rpx; 
 }
+
+.capsule-slider-bg {
+  position: absolute;
+  height: 100%;
+  top: 0;
+  left: 0;
+  background: rgba(255, 255, 255, 0.15); 
+  border-radius: 40rpx;
+  transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+  z-index: 1;
+}
+
 .capsule-item {
   flex: 1;
   display: flex;
@@ -277,12 +314,11 @@
   font-weight: 600;
   font-family: 'Inter', sans-serif;
   color: rgba(255, 255, 255, 0.5);
-  border-radius: 36rpx;
-  transition: all 0.2s ease;
+  position: relative;
+  z-index: 2;
+  transition: all 0.3s ease;
 }
 .capsule-item.active {
-  /* ✨ 统一修改为半透明白底+白字，取消阴影和橙色 */
-  background: rgba(255, 255, 255, 0.15); 
   color: #FFFFFF;
 }
 

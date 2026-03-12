@@ -1,36 +1,146 @@
 <view class="container">
   
-  <view class="custom-nav">
-    <view class="back-btn" bindtap="goBack"></view>
+  <view class="custom-nav" style="padding-top: {{statusBarHeight}}px;">
+    <view class="back-btn-box" bindtap="goBack">
+      <view class="back-btn"></view>
+    </view>
     <text class="nav-title">全部比赛</text>
   </view>
 
-  <view class="list-container">
-    <block wx:for="{{raceList}}" wx:key="id">
+  <view class="control-bar">
+    <view class="search-box">
+      <icon type="search" size="16" color="rgba(255,255,255,0.4)"/>
+      <input 
+        class="search-input" 
+        placeholder="搜索赛事名称或地点..." 
+        placeholder-class="ph-color"
+        value="{{searchKeyword}}"
+        bindinput="onSearchInput"
+      />
+      <icon wx:if="{{searchKeyword}}" type="clear" size="14" color="rgba(255,255,255,0.4)" bindtap="clearSearch" style="padding: 10rpx;"/>
+    </view>
+    
+    <view class="filter-btn" bindtap="openFilterPanel">
+      <text>筛选</text>
+      <view class="filter-dot" wx:if="{{activeFilterCount > 0}}"></view>
+    </view>
+  </view>
+
+  <scroll-view class="list-scroll" scroll-y>
+    <view class="list-container">
       
-      <view class="race-card" bindtap="goToDetail" data-id="{{item.id}}">
-        <view class="card-header">
-          <text class="race-name">{{item.name}}</text>
-          <view class="itra-tag" wx:if="{{item.hasItra}}">ITRA</view>
-          <view class="arrow-right"></view>
+      <block wx:for="{{groupedRaces}}" wx:key="monthStr" wx:for-item="group">
+        <view class="month-header">
+          <text class="mh-month">{{group.monthStr}}</text>
+          <text class="mh-year">{{group.yearStr}}</text>
+          <view class="month-line"></view>
         </view>
-        
-        <text class="race-date">{{item.date}}</text>
-        
-        <view class="card-bottom">
-          <view class="tags">
-            <block wx:for="{{item.tags}}" wx:for-item="tag" wx:key="dist">
-              <view class="dist-tag" style="color: {{tag.color}}; border-color: {{tag.color}}">
-                {{tag.dist}}
+
+        <block wx:for="{{group.races}}" wx:key="id" wx:for-item="race">
+          <view class="race-card" bindtap="goToDetail" data-id="{{race.id}}">
+            <view class="card-header">
+              <view class="title-group">
+                <text class="race-name">{{race.name}}</text>
+                <view class="itra-tag" wx:if="{{race.hasItra}}">ITRA</view>
               </view>
-            </block>
-          </view>
+              <view class="arrow-right"></view>
+            </view>
           
-          <text class="race-location">{{item.location}}</text>
+            <text class="race-date">{{race.date}}</text>
+            
+            <view class="card-bottom">
+              <view class="tags">
+                <block wx:for="{{race.tags}}" wx:for-item="tag" wx:key="dist">
+                  <view class="dist-tag" style="color: {{tag.color}};">
+                    {{tag.dist}}
+                  </view>
+                </block>
+              </view>
+              <text class="race-location">{{race.location}}</text>
+            </view>
+          </view>
+        </block>
+      </block>
+
+      <view class="empty-state" wx:if="{{groupedRaces.length === 0}}">
+        <text class="empty-text">没有找到匹配的赛事</text>
+      </view>
+
+      <view style="height: 100rpx;"></view>
+    </view>
+  </scroll-view>
+
+  <view class="filter-mask" wx:if="{{showFilter}}" bindtap="closeFilterPanel" catchtouchmove="preventTouchMove"></view>
+  
+  <view class="filter-panel {{showFilter ? 'show' : ''}}" catchtouchmove="preventTouchMove">
+    <view class="panel-drag-handle"></view>
+    
+    <view class="panel-header">
+      <text class="panel-btn-left" bindtap="resetFilters">重置</text>
+      <text class="panel-title">筛选赛事</text>
+      <text class="panel-btn-right" bindtap="confirmFilters">完成</text>
+    </view>
+
+    <scroll-view class="panel-scroll" scroll-y>
+      
+      <view class="filter-section">
+        <view class="section-title">ITRA 认证</view>
+        <view class="tag-group">
+          <view class="filter-tag {{filterOptions.itra === 'all' ? 'active' : ''}}" bindtap="selectItra" data-val="all">全部</view>
+          <view class="filter-tag {{filterOptions.itra === 'yes' ? 'active' : ''}}" bindtap="selectItra" data-val="yes">仅看有认证</view>
         </view>
       </view>
 
-    </block>
+      <view class="filter-section">
+        <view class="section-title">包含组别</view>
+        <view class="tag-group">
+          <view class="filter-tag {{filterOptions.distance === 'all' ? 'active' : ''}}" bindtap="selectDist" data-val="all">不限</view>
+          <view class="filter-tag {{filterOptions.distance === '0-30' ? 'active' : ''}}" bindtap="selectDist" data-val="0-30">30km 以下</view>
+          <view class="filter-tag {{filterOptions.distance === '30-60' ? 'active' : ''}}" bindtap="selectDist" data-val="30-60">30km - 60km</view>
+          <view class="filter-tag {{filterOptions.distance === '60-100' ? 'active' : ''}}" bindtap="selectDist" data-val="60-100">60km - 100km</view>
+          <view class="filter-tag {{filterOptions.distance === '100+' ? 'active' : ''}}" bindtap="selectDist" data-val="100+">100km 及以上</view>
+        </view>
+      </view>
+
+      <view class="filter-section">
+        <view class="section-title">举办地区</view>
+        <picker mode="region" custom-item="全部" bindchange="onRegionChange" value="{{filterOptions.region}}">
+          <view class="ios-picker-box">
+            <text class="{{regionDisplayText ? 'selected-text' : 'ph-text'}}">
+              {{regionDisplayText || '省份 / 城市 / 区'}}
+            </text>
+            <view class="arrow-right"></view>
+          </view>
+        </picker>
+      </view>
+
+      <view class="filter-section">
+        <view class="section-title">比赛时间范围</view>
+        <view class="date-range-box">
+          <picker mode="date" bindchange="onStartDateChange" value="{{filterOptions.startDate}}">
+            <view class="date-picker {{filterOptions.startDate ? 'has-val' : ''}}">
+              {{filterOptions.startDate || '开始日期'}}
+            </view>
+          </picker>
+          <text class="date-separator">至</text>
+          <picker mode="date" bindchange="onEndDateChange" value="{{filterOptions.endDate}}">
+            <view class="date-picker {{filterOptions.endDate ? 'has-val' : ''}}">
+              {{filterOptions.endDate || '结束日期'}}
+            </view>
+          </picker>
+        </view>
+      </view>
+
+      <view class="filter-section">
+        <view class="section-title">排序方式</view>
+        <view class="tag-group">
+          <view class="filter-tag {{filterOptions.sort === 'asc' ? 'active' : ''}}" bindtap="selectSort" data-val="asc">从近到远</view>
+          <view class="filter-tag {{filterOptions.sort === 'desc' ? 'active' : ''}}" bindtap="selectSort" data-val="desc">从远到近</view>
+        </view>
+      </view>
+
+      <view style="height: 100rpx;"></view>
+    </scroll-view>
   </view>
 
 </view>
