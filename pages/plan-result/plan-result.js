@@ -293,7 +293,6 @@ Page({
     let h = parseInt(options.h);
     let m = parseInt(options.m);
 
-    // ✨ 核心修复：如果传了小时没传分钟，分钟默认给 0！只有都没传才给 21:43
     let finalH = isNaN(h) ? 21 : h;
     let finalM = isNaN(m) ? (isNaN(h) ? 43 : 0) : m; 
 
@@ -313,7 +312,6 @@ Page({
       eventChannel.on('acceptDataFromOpenerPage', (data) => {
         hasReceivedDataFromOpener = true; 
         
-        // 防御性编程：如果从事件通道里传了时间参数，优先覆盖
         if (data.targetHours !== undefined && data.targetHours !== null) finalH = parseInt(data.targetHours);
         if (data.targetMinutes !== undefined && data.targetMinutes !== null) finalM = parseInt(data.targetMinutes);
 
@@ -325,7 +323,6 @@ Page({
           raceName: data.name || '越野赛', 
           startTime: data.startTime || '07:00',
           availableStartTimes: availableTimes,
-          // 更新界面的时间
           targetHours: finalH,
           targetMinutes: finalM,
           timeIndex: [finalH, finalM]
@@ -431,7 +428,8 @@ Page({
         startEle: i > 0 ? Math.round(arr[i-1].tempEle || 0) : 0,
         endEle: Math.round(cp.tempEle || 0),
         segCutoffMins: segCutoffMins, 
-        cutoffTime: cutoffTime        
+        cutoffTime: cutoffTime,
+        memo: cp.memo || '' // ✨ 核心修复：确保读取时把云端的备忘录取出绑定
       };
     });
     this.setData({ checkpoints: cps }, () => { this.runFatigueEngine(); });
@@ -453,17 +451,15 @@ Page({
 
     const a = movingMins / Math.pow(totalED, K);
     let runningED = 0;
-    let runningAccumulatedMins = 0; // ✨ 新增累计器：彻底消除多段四舍五入带来的堆叠误差
+    let runningAccumulatedMins = 0;
 
     checkpoints.forEach((cp, i) => {
       if (i === 0) { cp.moveMins = 0; return; }
       runningED += cp.segED;
       
-      // 计算从起点到当前点的精确总移动时间，然后再做四舍五入
       let exactMinsSoFar = a * Math.pow(runningED, K);
       let roundedMinsSoFar = Math.round(exactMinsSoFar);
       
-      // 当前赛段的时间 = 历史精确总时间 - 之前所有赛段实际分配掉的时间
       cp.moveMins = roundedMinsSoFar - runningAccumulatedMins;
       runningAccumulatedMins = roundedMinsSoFar;
     });
@@ -729,18 +725,15 @@ Page({
     return result;
   },
 
-  // ==========================================
-  // ✨ 核心修改 2：动态计算关门时间
-  // ==========================================
   updateTimesAndPaces(updateTotals = false) {
     let { checkpoints, startTime } = this.data;
     let [startH, startM] = startTime.split(':').map(Number);
-    let startMins = startH * 60 + startM; // 记录起点出发时的绝对分钟数
+    let startMins = startH * 60 + startM; 
     let currentMinutes = startMins;
     let totalMinsForGlobal = 0;
     
     let lastCutoffMins = startMins; 
-    let runningCutoffMins = startMins; // 累加器：用于叠加赛段时长
+    let runningCutoffMins = startMins; 
 
     const newCps = checkpoints.map((cp, i, arr) => {
       if (i === 0) {
@@ -758,19 +751,18 @@ Page({
       cp.arrAbsoluteMins = currentMinutes;
       cp.arrTime = this.formatTime(currentMinutes); 
       
-      // 🌟 动态推算关门时刻 🌟
       if (cp.segCutoffMins !== null && cp.segCutoffMins !== undefined) {
         runningCutoffMins += cp.segCutoffMins;
         cp.absoluteCutoffMins = runningCutoffMins;
         cp.displayCutoffTime = this.formatTime(runningCutoffMins);
-        lastCutoffMins = runningCutoffMins; // 同步给旧逻辑防止混用报错
+        lastCutoffMins = runningCutoffMins; 
       } 
       else if (cp.cutoffTime && cp.cutoffTime !== '--:--') {
         let [cH, cM] = cp.cutoffTime.split(':').map(Number);
         let cMins = cH * 60 + cM;
         
         while (cMins < lastCutoffMins) {
-          cMins += 24 * 60; // 跨天处理
+          cMins += 24 * 60; 
         }
         cp.absoluteCutoffMins = cMins;
         lastCutoffMins = cMins; 
@@ -782,7 +774,6 @@ Page({
         cp.displayCutoffTime = '--:--';
       }
 
-      // 超时判定
       cp.isOvertime = Number.isFinite(cp.absoluteCutoffMins)
         ? (currentMinutes > cp.absoluteCutoffMins)
         : false;
@@ -822,6 +813,19 @@ Page({
     if (type === 'rest') checkpoints[index].rest = val;
     else if (type === 'move') checkpoints[index].moveMins = val;
     this.setData({ checkpoints }, () => this.updateTimesAndPaces(true));
+  },
+
+  // ==========================================
+  // ✨ 核心修复：监听备忘录的输入并实时保存到本地数据结构
+  // ==========================================
+  onMemoInput(e) {
+    const index = e.currentTarget.dataset.index;
+    const val = e.detail.value;
+    
+    // 动态直接修改指定下标的 memo，避免引擎重算
+    this.setData({
+      [`checkpoints[${index}].memo`]: val
+    });
   },
 
   drawNativeElevationChart(ctx, cpData, chartX, chartY, chartW, chartH, globalMinE, globalMaxE) {
@@ -1054,6 +1058,7 @@ Page({
   async uploadPlanToCloud() {
     wx.showLoading({ title: '安全加密上传中...', mask: true });
     
+    // 每次上传都会带上 checkpoints 里最新的 memo 数据
     const localPlanSnapshot = this.saveLocalPlanSnapshot(this.data.checkpoints);
     const {
       raceId,
