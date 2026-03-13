@@ -7,7 +7,7 @@ Page({
     currentTab: 'future', 
     
     allPlans: [],    
-    futurePlans: [], 
+    futurePlans: [], // 现在存放的是分组后的数据
     historyPlans: [],
     displayList: []  
   },
@@ -33,7 +33,9 @@ Page({
     const tab = e.currentTarget.dataset.tab;
     // 切换 Tab 时，把所有项的滑动状态复位
     let newDisplay = tab === 'future' ? this.data.futurePlans : this.data.historyPlans;
-    newDisplay.forEach(item => item.slideX = 0);
+    newDisplay.forEach(group => {
+      group.plans.forEach(item => item.slideX = 0);
+    });
 
     this.setData({
       currentTab: tab,
@@ -79,11 +81,15 @@ Page({
 
         history.sort((a, b) => b.raceDateMs - a.raceDateMs);
 
+        // ✨ 核心调用：将一维数组转换为按月分组的二维数组
+        let groupedFuture = this.groupPlans(future);
+        let groupedHistory = this.groupPlans(history);
+
         this.setData({
           allPlans: rawPlans,
-          futurePlans: future,
-          historyPlans: history,
-          displayList: this.data.currentTab === 'future' ? future : history
+          futurePlans: groupedFuture,
+          historyPlans: groupedHistory,
+          displayList: this.data.currentTab === 'future' ? groupedFuture : groupedHistory
         });
       },
       fail: err => {
@@ -93,22 +99,65 @@ Page({
     });
   },
 
+  // ✨ 数据分组逻辑：根据 raceDateMs 提取年月进行切割
+  groupPlans(plans) {
+    if (!plans || plans.length === 0) return [];
+    let grouped = [];
+    let currentGroup = null;
+
+    plans.forEach(p => {
+      let dateObj;
+      if (p.raceDateMs) {
+        dateObj = new Date(p.raceDateMs);
+      } else if (p.raceDate) {
+        const nums = p.raceDate.match(/\d+/g);
+        if (nums && nums.length >= 2) {
+          dateObj = new Date(nums[0], nums[1] - 1);
+        } else {
+          dateObj = new Date();
+        }
+      } else {
+        dateObj = new Date();
+      }
+
+      const year = dateObj.getFullYear();
+      const month = dateObj.getMonth() + 1;
+      const groupKey = `${year}-${month}`;
+
+      if (!currentGroup || currentGroup.key !== groupKey) {
+        currentGroup = {
+          key: groupKey,
+          monthStr: `${month}月`,
+          yearStr: `${year}`,
+          plans: []
+        };
+        grouped.push(currentGroup);
+      }
+      currentGroup.plans.push(p);
+    });
+    return grouped;
+  },
+
   // ==========================================
-  // ✨ 触控滑动引擎 (Swipe to Delete)
+  // ✨ 触控滑动引擎升级：兼容嵌套数组
   // ==========================================
   onTouchStart(e) {
     if (e.touches.length === 1) {
       this.startX = e.touches[0].clientX;
       this.startY = e.touches[0].clientY;
       
-      let index = e.currentTarget.dataset.index;
+      let gIndex = e.currentTarget.dataset.gindex;
+      let iIndex = e.currentTarget.dataset.iindex;
       let list = this.data.displayList;
       let needsUpdate = false;
-      list.forEach((item, i) => {
-        if (i !== index && item.slideX !== 0) {
-          item.slideX = 0;
-          needsUpdate = true;
-        }
+      
+      list.forEach((group, gi) => {
+        group.plans.forEach((item, ii) => {
+          if ((gi !== gIndex || ii !== iIndex) && item.slideX !== 0) {
+            item.slideX = 0;
+            needsUpdate = true;
+          }
+        });
       });
       if (needsUpdate) this.setData({ displayList: list });
     }
@@ -123,17 +172,19 @@ Page({
 
       if (Math.abs(disY) > Math.abs(disX)) return;
 
-      let index = e.currentTarget.dataset.index;
+      let gIndex = e.currentTarget.dataset.gindex;
+      let iIndex = e.currentTarget.dataset.iindex;
       let list = this.data.displayList;
+      let item = list[gIndex].plans[iIndex];
 
       if (disX > 0) { 
         let slideX = -disX;
         if (slideX < -80) slideX = -80; 
-        list[index].slideX = slideX;
-      } else if (disX < 0 && list[index].slideX < 0) {
+        item.slideX = slideX;
+      } else if (disX < 0 && item.slideX < 0) {
         let slideX = -80 - disX; 
         if (slideX > 0) slideX = 0;
-        list[index].slideX = slideX;
+        item.slideX = slideX;
       }
       
       this.setData({ displayList: list });
@@ -147,25 +198,25 @@ Page({
       let disX = this.startX - endX;
       let disY = this.startY - endY;
       
-      // 防手抖：点击不触发缩回
       if (Math.abs(disX) < 5 && Math.abs(disY) < 5) {
         return;
       }
 
-      let index = e.currentTarget.dataset.index;
+      let gIndex = e.currentTarget.dataset.gindex;
+      let iIndex = e.currentTarget.dataset.iindex;
       let list = this.data.displayList;
+      let item = list[gIndex].plans[iIndex];
 
-      if (list[index].slideX < -40) {
-        list[index].slideX = -80;
+      if (item.slideX < -40) {
+        item.slideX = -80;
       } else {
-        list[index].slideX = 0;
+        item.slideX = 0;
       }
 
       this.setData({ displayList: list });
     }
   },
 
-  // ✨ 恢复原生弹窗确认删除
   deletePlan(e) {
     const id = e.currentTarget.dataset.id;
     wx.showModal({
@@ -190,7 +241,7 @@ Page({
         } else {
           // 用户取消删除，把弹出来的卡片缩回去
           let list = this.data.displayList;
-          list.forEach(item => item.slideX = 0);
+          list.forEach(group => group.plans.forEach(item => item.slideX = 0));
           this.setData({ displayList: list });
         }
       }
@@ -198,13 +249,14 @@ Page({
   },
 
   goToMyPlan(e) {
-    const index = e.currentTarget.dataset.index;
-    const planItem = this.data.displayList[index];
+    const gIndex = e.currentTarget.dataset.gindex;
+    const iIndex = e.currentTarget.dataset.iindex;
+    const planItem = this.data.displayList[gIndex].plans[iIndex];
 
     // 防误触：如果当前项已经被滑开，点击区域只是把它收回，不进行页面跳转
     if (planItem.slideX < -10) {
       let list = this.data.displayList;
-      list[index].slideX = 0;
+      list[gIndex].plans[iIndex].slideX = 0;
       this.setData({ displayList: list });
       return;
     }

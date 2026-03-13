@@ -92,6 +92,11 @@
           </view>
         </view>
       </block>
+
+      <view class="load-more-btn" wx:if="{{hasMoreRaces}}" bindtap="goToMore">
+        <text>查看全部赛事</text>
+        <view class="arrow-right-small"></view>
+      </view>
     </view>
   </view>
 

@@ -8,7 +8,8 @@ Page({
     myPlans: [],  
     
     isConnected: false,
-    deviceName: 'AST的\nRMB PRO' 
+    deviceName: 'AST的\nRMB PRO',
+    hasMoreRaces: false // ✨ 新增：判断是否超过10场比赛
   },
 
   onLoad() {
@@ -92,7 +93,16 @@ Page({
           return this.parseTime(race.date) >= nowMs;
         });
 
-        this.setData({ raceList: futureRaces });
+        // ✨ 核心修改：只截取前10个距离最近的比赛，并判断是否还有更多
+        const MAX_DISPLAY = 10;
+        const displayRaces = futureRaces.slice(0, MAX_DISPLAY);
+        const hasMore = futureRaces.length > MAX_DISPLAY;
+
+        this.setData({ 
+          raceList: displayRaces,
+          hasMoreRaces: hasMore 
+        });
+        
         wx.hideLoading();
       },
       fail: err => {

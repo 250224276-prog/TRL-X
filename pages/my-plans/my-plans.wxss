@@ -81,6 +81,34 @@ page {
 }
 
 /* ========================================== */
+/* ✨ 新增：月份标题栏视觉样式 */
+/* ========================================== */
+.month-header {
+  display: flex;
+  align-items: baseline;
+  margin: 30rpx 0 20rpx 0;
+}
+.mh-month {
+  font-size: 46rpx;
+  font-weight: 900;
+  font-family: 'Inter', sans-serif;
+  margin-right: 16rpx;
+}
+.mh-year {
+  font-size: 2rpx;
+  font-weight: 600;
+  color: rgba(255,255,255,0.4);
+  font-family: 'Inter', sans-serif;
+}
+.month-line {
+  flex: 1;
+  height: 2rpx;
+  background: rgba(255,255,255,0.1);
+  margin-left: 30rpx;
+  transform: translateY(-8rpx); /* 微调分割线的垂直高度居中感 */
+}
+
+/* ========================================== */
 /* 列表区域 & 滑动删除核心结构 */
 /* ========================================== */
 .scroll-area {
@@ -144,25 +172,34 @@ page {
   position: relative;
 }
 
-.plan-info-left { display: flex; flex-direction: column; gap: 6rpx; flex: 1; overflow: hidden; padding-right: 20rpx; }
+.plan-info-left { display: flex; flex-direction: column; gap: 6rpx; flex: 1;
+  overflow: hidden; padding-right: 20rpx; }
 .plan-title-group { display: flex; align-items: center; gap: 12rpx; width: 100%; }
-.plan-name { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 28rpx; color: #FFFFFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; }
+.plan-name { font-family: 'Inter', sans-serif;
+  font-weight: 700; font-size: 28rpx; color: #FFFFFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1;
+}
 
 .plan-group-tag {
   background: rgba(255, 255, 255, 0.08); border-radius: 16rpx; padding: 2rpx 10rpx;
-  display: flex; align-items: center; justify-content: center; border: 1rpx solid rgba(255, 255, 255, 0.05);
+  display: flex; align-items: center; justify-content: center;
+  border: 1rpx solid rgba(255, 255, 255, 0.05);
   font-family: 'Inter', sans-serif; font-size: 16rpx; font-weight: 600; color: #36E153; flex-shrink: 0;
 }
 
 .plan-date { font-family: 'Inter', sans-serif; font-weight: 500; font-size: 20rpx; color: rgba(255, 255, 255, 0.4); }
 
-.plan-info-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4rpx; margin-right: 30rpx; flex-shrink: 0; }
-.plan-time { font-family: 'Inter', sans-serif; font-weight: 500; font-size: 26rpx; color: #FFFFFF; }
+.plan-info-right { display: flex; flex-direction: column;
+  align-items: flex-end; gap: 4rpx; margin-right: 30rpx; flex-shrink: 0; }
+.plan-time { font-family: 'Inter', sans-serif; font-weight: 500; font-size: 26rpx; color: #FFFFFF;
+}
 .plan-countdown { font-family: 'PingFang HK', sans-serif; font-weight: 500; font-size: 22rpx; color: #36E153; opacity: 0.6; }
 
-.dark-arrow { position: absolute; right: 0; top: 50%; transform: translateY(-50%) rotate(45deg); border-color: rgba(255, 255, 255, 0.4) !important; }
-.plan-divider { width: calc(100% - 72rpx); height: 1rpx; background: rgba(255, 255, 255, 0.15); margin: 0 auto; }
+.dark-arrow { position: absolute; right: 0;
+  top: 50%; transform: translateY(-50%) rotate(45deg); border-color: rgba(255, 255, 255, 0.4) !important; }
+.plan-divider { width: calc(100% - 72rpx); height: 1rpx;
+  background: rgba(255, 255, 255, 0.15); margin: 0 auto; }
 
 /* 空状态 */
-.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 200rpx; }
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  margin-top: 200rpx; }
 .empty-text { font-family: 'PingFang SC', sans-serif; font-size: 30rpx; color: rgba(255, 255, 255, 0.4); }

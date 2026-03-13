@@ -22,11 +22,47 @@ page { background: #000000; color: #FFFFFF; font-family: 'Inter', sans-serif; }
 .arrow-left { width: 18rpx; height: 18rpx; border-left: 4rpx solid #FFF; border-bottom: 4rpx solid #FFF; transform: rotate(45deg); }
 
 .race-name { font-weight: 700; font-size: 46rpx; margin-bottom: 35rpx; }
-.config-grid { display: flex; gap: 24rpx; }
-.config-item { display: flex; flex-direction: column; }
-.config-label { font-size: 22rpx; color: rgba(255,255,255,0.5); margin-bottom: 10rpx; padding-left: 10rpx;}
-.config-capsule { background: rgba(255, 255, 255, 0.15); border-radius: 20rpx; padding: 10rpx 24rpx; text-align: center; }
-.config-capsule text { font-size: 28rpx; font-weight: 700; color: #FFF; }
+
+/* ✨ 核心调整：强行让4个按键等分对齐，并控制内部 picker 和胶囊的尺寸 */
+.config-grid { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center;
+  width: 100%; 
+  gap: 16rpx; 
+}
+.config-item { 
+  display: flex; 
+  flex-direction: column; 
+  align-items: center; 
+  flex: 1; 
+  min-width: 0; /* 防止文字过长撑爆 Flex 容器 */
+}
+.config-label { 
+  font-size: 20rpx; 
+  color: rgba(255,255,255,0.5); 
+  margin-bottom: 8rpx; 
+  white-space: nowrap; 
+}
+.config-picker {
+  width: 100%; /* 强行让组件占满那一列 */
+}
+.config-capsule { 
+  background: rgba(255, 255, 255, 0.15); 
+  border-radius: 100rpx; 
+  height: 60rpx; /* ✨ 固定统一高度 */
+  width: 100%;   /* ✨ 强制宽度拉满列容器 */
+  display: flex; 
+  justify-content: center; 
+  align-items: center;
+  box-sizing: border-box;
+}
+.config-capsule text { 
+  font-size: 24rpx; /* 微调以塞下 42h 0m */
+  font-weight: 700; 
+  color: #FFF; 
+  white-space: nowrap;
+}
 
 /* ========================================== */
 /* 3. 主页面：CP点滚动列表区 */
@@ -47,7 +83,6 @@ page { background: #000000; color: #FFFFFF; font-family: 'Inter', sans-serif; }
 
 .text-orange, .txt-orange { color: #FFAA16 !important; }
 .text-blue, .txt-blue { color: #3284FF !important; }
-/* ✨ 报警颜色类：当计划被关门时飘红警告 */
 .text-red, .txt-red { color: #F94747 !important; }
 
 .elevation-box { position: absolute; right: 180rpx; top: 60rpx; width: 80rpx; height: 43rpx; }
@@ -76,7 +111,7 @@ page { background: #000000; color: #FFFFFF; font-family: 'Inter', sans-serif; }
   position: fixed; left: 0; right: 0; bottom: 0; height: 86vh; 
   background: #1D1D1D; border-radius: 56rpx 56rpx 0 0; z-index: 101; 
   transform: translateY(100%); 
-  transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1); 
+  transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
   display: flex; flex-direction: column; 
 }
 .detail-sheet.show { transform: translateY(0); }
@@ -112,24 +147,14 @@ page { background: #000000; color: #FFFFFF; font-family: 'Inter', sans-serif; }
 
 .ds-chart-area { 
   width: 100%; 
-  height: 320rpx; 
+  height: 320rpx;
   position: relative; 
   box-sizing: border-box; 
   margin-bottom: 30rpx;
   background: transparent;
 }
-.elev-canvas {
-  width: 100%;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 10;
-}
-.chart-loading {
-  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  font-size: 24rpx; color: rgba(255,255,255,0.3);
-}
+.elev-canvas { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 10; }
+.chart-loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24rpx; color: rgba(255,255,255,0.3); }
 
 .ds-grid { margin-bottom: 30rpx; }
 .ds-grid-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16rpx;}
@@ -155,120 +180,23 @@ page { background: #000000; color: #FFFFFF; font-family: 'Inter', sans-serif; }
 .ph-color { color: rgba(255,255,255,0.3); }
 
 /* 隐藏海报画布 */
-.share-canvas {
-  position: fixed;
-  left: -9999px;
-  top: -9999px;
-  width: 1080px; 
-  height: 2000px;
-}
+.share-canvas { position: fixed; left: -9999px; top: -9999px; width: 1080px; height: 2000px; }
 
 /* ========================================== */
-/* ✨ 新增：TRL-X 暗黑极客风 自定义弹窗样式组 */
+/* 自定义弹窗样式组 */
 /* ========================================== */
+.custom-modal-mask { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 200; backdrop-filter: blur(8px); }
+.trl-modal-box { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.9); width: 620rpx; background: #1D1D1D; border-radius: 40rpx; padding: 60rpx; z-index: 201; box-sizing: border-box; text-align: center; border: 2rpx solid rgba(255,255,255,0.1); opacity: 0; visibility: hidden; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); }
+.trl-modal-box.show { transform: translate(-50%, -50%) scale(1); opacity: 1; visibility: visible; }
 
-/* 1. 弹窗专用遮罩层 (比 Detail Sheet 图层更高，且带有模糊) */
-.custom-modal-mask {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0,0,0,0.6);
-  z-index: 200; /* 高于 detail-sheet */
-  backdrop-filter: blur(8px);
-}
+.trl-modal-title { font-family: 'Hiragino Sans GB', sans-serif; font-size: 38rpx; font-weight: 700; color: #FF9811; margin-bottom: 30rpx; display: block; }
+.trl-modal-content { font-family: 'PingFang SC', sans-serif; font-size: 28rpx; color: rgba(255,255,255,0.7); line-height: 1.6; margin-bottom: 60rpx; display: block; white-space: pre-line; }
 
-/* 2. 弹窗主体容器 */
-.trl-modal-box {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) scale(0.9); /* 初始缩小一点点用于动画 */
-  width: 620rpx;
-  background: #1D1D1D;
-  border-radius: 40rpx;
-  padding: 60rpx;
-  z-index: 201; /* 高于遮罩层 */
-  box-sizing: border-box;
-  text-align: center;
-  border: 2rpx solid rgba(255,255,255,0.1); /* 微弱的描边增加极客感 */
-  opacity: 0;
-  visibility: hidden;
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
-/* 弹窗显示时的状态 */
-.trl-modal-box.show {
-  transform: translate(-50%, -50%) scale(1);
-  opacity: 1;
-  visibility: visible;
-}
-
-/* 3. 弹窗标题 */
-.trl-modal-title {
-  font-family: 'Hiragino Sans GB', sans-serif;
-  font-size: 38rpx;
-  font-weight: 700;
-  color: #FF9811; /* TRL-X 品牌橙 */
-  margin-bottom: 30rpx;
-  display: block;
-}
-
-/* 4. 弹窗文本内容 */
-.trl-modal-content {
-  font-family: 'PingFang SC', sans-serif;
-  font-size: 28rpx;
-  color: rgba(255,255,255,0.7);
-  line-height: 1.6;
-  margin-bottom: 60rpx;
-  display: block;
-  white-space: pre-line; /* 识别 JS 里的 \n 换行符 */
-}
-
-/* 5. 弹窗按钮组容器 */
-.trl-modal-btns {
-  display: flex;
-  gap: 30rpx;
-}
-
-/* 6. 基础胶囊按钮样式 (源自原页面，稍作调整) */
-.trl-btn-primary, .trl-btn-secondary {
-  flex: 1;
-  height: 90rpx;
-  border-radius: 45rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 30rpx;
-  font-weight: 700;
-  transition: all 0.2s ease;
-}
-
-/* 主行动按钮 (橙色胶囊) */
-.trl-btn-primary {
-  background: #FF9811;
-  color: #000;
-  box-shadow: 0 4rpx 15rpx rgba(255, 152, 17, 0.3);
-}
-
-/* 次行动按钮 (灰色胶囊) */
-.trl-btn-secondary {
-  background: rgba(255, 255, 255, 0.1);
-  color: #FFF;
-}
-
-/* 成功页的通栏按钮 */
-.full-width {
-  flex: none !important;
-  width: 100% !important;
-}
-
-/* 点击反馈 */
-.trl-btn-primary:active, .trl-btn-secondary:active {
-  transform: scale(0.97);
-  opacity: 0.8;
-}
-
-/* 辅助颜色类 */
+.trl-modal-btns { display: flex; gap: 30rpx; }
+.trl-btn-primary, .trl-btn-secondary { flex: 1; height: 90rpx; border-radius: 45rpx; display: flex; align-items: center; justify-content: center; font-size: 30rpx; font-weight: 700; transition: all 0.2s ease; }
+.trl-btn-primary { background: #FF9811; color: #000; box-shadow: 0 4rpx 15rpx rgba(255, 152, 17, 0.3); }
+.trl-btn-secondary { background: rgba(255, 255, 255, 0.1); color: #FFF; }
+.full-width { flex: none !important; width: 100% !important; }
+.trl-btn-primary:active, .trl-btn-secondary:active { transform: scale(0.97); opacity: 0.8; }
 .text-green { color: #36E153 !important; }
+
