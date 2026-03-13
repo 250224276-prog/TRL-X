@@ -1,3 +1,4 @@
+// 页面：赛事控制台，显示赛事编辑表单和 GPX 上传入口
 const db = wx.cloud.database();
 
 Page({

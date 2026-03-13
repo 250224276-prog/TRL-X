@@ -1,3 +1,4 @@
+// 页面：计划结果，显示分段计划、配速计算和同步操作
 const app = getApp();
 // 获取云数据库
 const db = wx.cloud.database();

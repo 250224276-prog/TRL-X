@@ -1,3 +1,4 @@
+// 页面：全部计划，显示未来/历史计划和删除入口
 const db = wx.cloud.database();
 
 Page({

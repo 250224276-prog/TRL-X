@@ -1,3 +1,4 @@
+// 页面：历史赛事库，显示赛事列表并提供编辑删除入口
 const db = wx.cloud.database();
 
 Page({

@@ -1,3 +1,4 @@
+// 页面：首页，显示设备状态、近期计划和赛事入口
 const app = getApp();
 const db = wx.cloud.database();
 
