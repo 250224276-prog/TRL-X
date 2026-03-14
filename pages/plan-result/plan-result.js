@@ -1,6 +1,12 @@
 const app = getApp();
-// 获取云数据库
 const db = wx.cloud.database();
+
+const {
+  generateKmlFromPlan,
+  generateGpxFromPlan,
+  stringToUtf8ArrayBuffer,
+  sendKmlBufferToBle
+} = require('../../utils/kml-sender');
 
 Page({
   data: {
@@ -293,7 +299,6 @@ Page({
     let h = parseInt(options.h);
     let m = parseInt(options.m);
 
-    // ✨ 核心修复：如果传了小时没传分钟，分钟默认给 0！只有都没传才给 21:43
     let finalH = isNaN(h) ? 21 : h;
     let finalM = isNaN(m) ? (isNaN(h) ? 43 : 0) : m; 
 
@@ -313,7 +318,6 @@ Page({
       eventChannel.on('acceptDataFromOpenerPage', (data) => {
         hasReceivedDataFromOpener = true; 
         
-        // 防御性编程：如果从事件通道里传了时间参数，优先覆盖
         if (data.targetHours !== undefined && data.targetHours !== null) finalH = parseInt(data.targetHours);
         if (data.targetMinutes !== undefined && data.targetMinutes !== null) finalM = parseInt(data.targetMinutes);
 
@@ -325,7 +329,6 @@ Page({
           raceName: data.name || '越野赛', 
           startTime: data.startTime || '07:00',
           availableStartTimes: availableTimes,
-          // 更新界面的时间
           targetHours: finalH,
           targetMinutes: finalM,
           timeIndex: [finalH, finalM]
@@ -453,17 +456,15 @@ Page({
 
     const a = movingMins / Math.pow(totalED, K);
     let runningED = 0;
-    let runningAccumulatedMins = 0; // ✨ 新增累计器：彻底消除多段四舍五入带来的堆叠误差
+    let runningAccumulatedMins = 0;
 
     checkpoints.forEach((cp, i) => {
       if (i === 0) { cp.moveMins = 0; return; }
       runningED += cp.segED;
       
-      // 计算从起点到当前点的精确总移动时间，然后再做四舍五入
       let exactMinsSoFar = a * Math.pow(runningED, K);
       let roundedMinsSoFar = Math.round(exactMinsSoFar);
       
-      // 当前赛段的时间 = 历史精确总时间 - 之前所有赛段实际分配掉的时间
       cp.moveMins = roundedMinsSoFar - runningAccumulatedMins;
       runningAccumulatedMins = roundedMinsSoFar;
     });
@@ -729,18 +730,15 @@ Page({
     return result;
   },
 
-  // ==========================================
-  // ✨ 核心修改 2：动态计算关门时间
-  // ==========================================
   updateTimesAndPaces(updateTotals = false) {
     let { checkpoints, startTime } = this.data;
     let [startH, startM] = startTime.split(':').map(Number);
-    let startMins = startH * 60 + startM; // 记录起点出发时的绝对分钟数
+    let startMins = startH * 60 + startM;
     let currentMinutes = startMins;
     let totalMinsForGlobal = 0;
     
     let lastCutoffMins = startMins; 
-    let runningCutoffMins = startMins; // 累加器：用于叠加赛段时长
+    let runningCutoffMins = startMins;
 
     const newCps = checkpoints.map((cp, i, arr) => {
       if (i === 0) {
@@ -758,19 +756,18 @@ Page({
       cp.arrAbsoluteMins = currentMinutes;
       cp.arrTime = this.formatTime(currentMinutes); 
       
-      // 🌟 动态推算关门时刻 🌟
       if (cp.segCutoffMins !== null && cp.segCutoffMins !== undefined) {
         runningCutoffMins += cp.segCutoffMins;
         cp.absoluteCutoffMins = runningCutoffMins;
         cp.displayCutoffTime = this.formatTime(runningCutoffMins);
-        lastCutoffMins = runningCutoffMins; // 同步给旧逻辑防止混用报错
+        lastCutoffMins = runningCutoffMins;
       } 
       else if (cp.cutoffTime && cp.cutoffTime !== '--:--') {
         let [cH, cM] = cp.cutoffTime.split(':').map(Number);
         let cMins = cH * 60 + cM;
         
         while (cMins < lastCutoffMins) {
-          cMins += 24 * 60; // 跨天处理
+          cMins += 24 * 60;
         }
         cp.absoluteCutoffMins = cMins;
         lastCutoffMins = cMins; 
@@ -782,7 +779,6 @@ Page({
         cp.displayCutoffTime = '--:--';
       }
 
-      // 超时判定
       cp.isOvertime = Number.isFinite(cp.absoluteCutoffMins)
         ? (currentMinutes > cp.absoluteCutoffMins)
         : false;
@@ -1134,23 +1130,55 @@ Page({
 
   async executeSyncAnimation() {
     let payloadForBleLog = null;
-    const success = await this.uploadPlanToCloud();
-    if (!success) return; 
+    const uploadSuccess = await this.uploadPlanToCloud();
     payloadForBleLog = this.buildBlePlanPayload();
     console.log('[BLE Send] payload object =', payloadForBleLog);
     console.log('[BLE Send] payload json =', JSON.stringify(payloadForBleLog));
 
     wx.showLoading({ title: '正在打包路书...', mask: true });
-    
-    setTimeout(() => {
+
+    try {
+      // 发送 JSON 格式的 BLE 载荷
+      const jsonContent = JSON.stringify(payloadForBleLog);
+      console.log('[JSON Generated]', jsonContent);
+
+      const jsonBuffer = stringToUtf8ArrayBuffer(jsonContent);
+      console.log('[JSON Buffer] Length:', jsonBuffer.byteLength);
+
+      wx.hideLoading();
+
+      if (!app.globalData.isConnected || !app.globalData.connectedDeviceId) {
+        wx.showToast({ title: '设备未连接', icon: 'none' });
+        return;
+      }
+
       wx.showLoading({ title: '蓝牙传输中...', mask: true });
-      
-      setTimeout(() => {
-        wx.hideLoading();
-        this.setupSuccessModal('同步手表成功');
-      }, 1500); 
-      
-    }, 1000); 
+
+      await sendKmlBufferToBle(jsonBuffer, {
+        deviceId: app.globalData.connectedDeviceId,
+        chunkSize: 230,
+        writeDelayMs: 20,
+        onProgress: (progress) => {
+          console.log('[BLE Progress]', progress);
+          wx.showLoading({
+            title: `传输中 ${progress.percent}%`,
+            mask: true
+          });
+        }
+      });
+
+      wx.hideLoading();
+      this.setupSuccessModal('同步手表成功');
+
+    } catch (err) {
+      wx.hideLoading();
+      console.error('[BLE Error]', err);
+      wx.showModal({
+        title: '同步失败',
+        content: err.message || '请检查设备连接后重试',
+        showCancel: false
+      });
+    }
   },
 
   setupSuccessModal(titleText) {

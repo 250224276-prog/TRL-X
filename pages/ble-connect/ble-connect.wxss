@@ -110,7 +110,21 @@
   font-weight: 600;
   color: rgba(255, 255, 255, 0.6);
   display: block;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 30rpx;
+}
+
+.refresh-btn {
+  font-size: 26rpx;
+  color: #FF9811;
+  padding: 8rpx 20rpx;
+  border: 2rpx solid #FF9811;
+  border-radius: 24rpx;
 }
 
 .device-list {
@@ -159,6 +173,12 @@
   color: #FFFFFF;
 }
 
+.device-signal {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'Inter', sans-serif;
+}
+
 .device-mac {
   font-size: 20rpx;
   color: rgba(255, 255, 255, 0.4);
@@ -195,4 +215,21 @@
   font-weight: 600;
   padding: 12rpx 30rpx;
   border-radius: 32rpx;
+}
+
+.connecting-indicator {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 12rpx 20rpx;
+}
+
+.device-card.connecting {
+  opacity: 0.7;
+}
+
+.empty-tip {
+  text-align: center;
+  padding: 60rpx 0;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 28rpx;
 }
