@@ -30,6 +30,12 @@
       }
     ]
   },
+  "permission": {
+    "scope.bluetooth": {
+      "desc": "用于连接 BLE 设备传输数据"
+    }
+  },
+  "requiredPrivateInfos": ["getLocation"],
   "style": "v2",
   "sitemapLocation": "sitemap.json"
 }

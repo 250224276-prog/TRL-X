@@ -1,5 +1,6 @@
+
 <view class="container">
-  
+
   <view class="custom-nav">
     <view class="back-btn" bindtap="goBack"></view>
     <text class="nav-title">添加设备</text>
@@ -16,31 +17,44 @@
   </view>
 
   <view class="list-section">
-    <text class="section-title">可用设备</text>
-    
+    <view class="section-header">
+      <text class="section-title">可用设备</text>
+      <view class="refresh-btn" bindtap="refreshList" wx:if="{{!isSearching}}">刷新</view>
+    </view>
+
     <view class="device-list">
-      <block wx:for="{{deviceList}}" wx:key="id">
-        <view class="device-card" bindtap="connectDevice" data-name="{{item.name}}">
-          
+      <block wx:for="{{deviceList}}" wx:key="deviceId">
+        <view class="device-card {{connectingDeviceId === item.deviceId ? 'connecting' : ''}}"
+              bindtap="connectDevice"
+              data-deviceid="{{item.deviceId}}"
+              data-name="{{item.name}}">
+
           <view class="device-info">
-            <view class="device-icon"></view> <view class="text-group">
+            <view class="device-icon"></view>
+            <view class="text-group">
               <text class="device-name">{{item.name}}</text>
-              <text class="device-mac">MAC: {{item.mac}}</text>
+              <text class="device-signal">信号: {{item.signal}} ({{item.rssi}}dBm)</text>
             </view>
           </view>
 
           <view class="action-group">
             <view class="signal-bars">
-              <view class="bar {{item.signal > -80 ? 'active' : ''}}"></view>
-              <view class="bar {{item.signal > -60 ? 'active' : ''}}"></view>
-              <view class="bar {{item.signal > -50 ? 'active' : ''}}"></view>
+              <view class="bar {{item.rssi > -80 ? 'active' : ''}}"></view>
+              <view class="bar {{item.rssi > -60 ? 'active' : ''}}"></view>
+              <view class="bar {{item.rssi > -50 ? 'active' : ''}}"></view>
             </view>
-            <view class="connect-btn">连接</view>
+            <view class="connect-btn" wx:if="{{connectingDeviceId !== item.deviceId}}">连接</view>
+            <view class="connecting-indicator" wx:else>连接中...</view>
           </view>
-          
+
         </view>
       </block>
+
+      <view class="empty-tip" wx:if="{{deviceList.length === 0 && !isSearching}}">
+        <text>未发现设备，请点击刷新重试</text>
+      </view>
     </view>
   </view>
 
 </view>
+
