@@ -1,3 +1,4 @@
+// 页面：个人中心，显示登录状态和控制台入口
 // pages/profile/profile.js
 const app = getApp(); // 引入全局大脑
 

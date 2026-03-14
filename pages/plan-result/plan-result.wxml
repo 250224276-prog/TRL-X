@@ -6,20 +6,27 @@
     <view class="config-grid">
       <view class="config-item">
         <text class="config-label">计划用时</text>
-        <picker mode="multiSelector" range="{{timeRange}}" value="{{timeIndex}}" bindchange="onTimeChange">
+        <picker class="config-picker" mode="multiSelector" range="{{timeRange}}" value="{{timeIndex}}" bindchange="onTimeChange">
           <view class="config-capsule"><text>{{targetHours}}h {{targetMinutes}}m</text></view>
         </picker>
       </view>
       <view class="config-item">
         <text class="config-label">发枪时间</text>
-        <picker mode="selector" range="{{availableStartTimes}}" disabled="{{availableStartTimes.length <= 1}}" bindchange="onStartChange">
+        <picker class="config-picker" mode="selector" range="{{availableStartTimes}}" disabled="{{availableStartTimes.length <= 1}}" bindchange="onStartChange">
           <view class="config-capsule" style="{{availableStartTimes.length <= 1 ? 'opacity: 0.7;' : ''}}"><text>{{startTime}}</text></view>
         </picker>
       </view>
       <view class="config-item">
         <text class="config-label">平均休息</text>
-        <picker mode="selector" range="{{restRange}}" value="{{restIndex}}" bindchange="onRestChange">
+        <picker class="config-picker" mode="selector" range="{{restRange}}" value="{{restIndex}}" bindchange="onRestChange">
           <view class="config-capsule"><text>{{globalRestMins}}m</text></view>
+        </picker>
+      </view>
+      
+      <view class="config-item">
+        <text class="config-label">补给提示</text>
+        <picker class="config-picker" mode="selector" range="{{nutritionRange}}" value="{{nutritionIndex}}" bindchange="onNutritionChange">
+          <view class="config-capsule"><text>{{nutritionVal}}</text></view>
         </picker>
       </view>
     </view>
@@ -176,7 +183,7 @@
           <view class="ds-memo-wrapper">
             <text class="ds-input-lbl" style="text-align: left;">休息备忘录</text>
             <view class="ds-memo-box">
-              <textarea placeholder="点击添加备忘 (例如: 吃盐丸、换袜子)..." placeholder-class="ph-color" cursor-spacing="40" />
+              <textarea value="{{item.memo}}" data-index="{{index}}" bindinput="onMemoInput" placeholder="点击添加备忘 (例如: 吃盐丸、换袜子)..." placeholder-class="ph-color" cursor-spacing="40" />
             </view>
           </view>
 

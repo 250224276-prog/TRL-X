@@ -36,8 +36,8 @@
           <view class="month-line"></view>
         </view>
 
-        <block wx:for="{{group.races}}" wx:key="id" wx:for-item="race">
-          <view class="race-card" bindtap="goToDetail" data-id="{{race.id}}">
+        <block wx:for="{{group.races}}" wx:key="_id" wx:for-item="race">
+          <view class="race-card" bindtap="goToDetail" data-id="{{race._id || race.id}}">
             <view class="card-header">
               <view class="title-group">
                 <text class="race-name">{{race.name}}</text>
@@ -74,7 +74,6 @@
   
   <view class="filter-panel {{showFilter ? 'show' : ''}}" catchtouchmove="preventTouchMove">
     <view class="panel-drag-handle"></view>
-    
     <view class="panel-header">
       <text class="panel-btn-left" bindtap="resetFilters">重置</text>
       <text class="panel-title">筛选赛事</text>

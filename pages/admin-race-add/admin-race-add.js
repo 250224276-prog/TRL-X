@@ -1,3 +1,4 @@
+// 页面：赛事控制台，显示赛事编辑表单和 GPX 上传入口
 const db = wx.cloud.database();
 
 Page({
@@ -23,7 +24,8 @@ Page({
         themeColorIndex: 0, 
         startTime1: '07:00', startTime2: '', 
         detailMapPath: '', gpxFilePath: '', gpxFileName: '',
-        oldMapFileId: '', oldGpxFileId: '' 
+        oldMapFileId: '', oldGpxFileId: '',
+        actualDist: '', elevation: '' // 补全字段
       }
     ]
   },
@@ -55,12 +57,16 @@ Page({
           gpxFilePath: g.gpxFileID || '',      
           gpxFileName: g.gpxFileID ? '已上传历史GPX (点击可重传)' : '',
           oldMapFileId: g.detailMapImg || '',
-          oldGpxFileId: g.gpxFileID || ''
+          oldGpxFileId: g.gpxFileID || '',
+          // 确保解析好的数据能在编辑模式下得以继承
+          actualDist: g.actualDist || '', 
+          elevation: g.elevation || '',
+          checkpoints: g.checkpoints || []
         };
       });
 
       if (loadedGroups.length === 0) {
-        loadedGroups = [{ dist: '', cutoffTime: '', themeColorIndex: 0, startTime1: '07:00', startTime2: '', detailMapPath: '', gpxFilePath: '', gpxFileName: '' }];
+        loadedGroups = [{ dist: '', cutoffTime: '', themeColorIndex: 0, startTime1: '07:00', startTime2: '', detailMapPath: '', gpxFilePath: '', gpxFileName: '', actualDist: '', elevation: '' }];
       }
 
       this.setData({
@@ -79,7 +85,6 @@ Page({
     }
   },
 
-  // ✨ 跳转到历史赛事库
   goToRaceList() {
     wx.navigateTo({ url: '/pages/admin-race-list/admin-race-list' });
   },
@@ -98,7 +103,7 @@ Page({
     newGroups.push({
       dist: '', cutoffTime: '', 
       themeColorIndex: 0, startTime1: '07:00', startTime2: '',
-      detailMapPath: '', gpxFilePath: '', gpxFileName: ''
+      detailMapPath: '', gpxFilePath: '', gpxFileName: '', actualDist: '', elevation: ''
     });
     this.setData({ groups: newGroups });
   },
@@ -125,15 +130,33 @@ Page({
     });
   },
 
+  // ✨ 核心修改：放开 extension 限制，通过 JS 手动校验
   chooseGroupGpx(e) {
     const index = e.currentTarget.dataset.index;
     wx.chooseMessageFile({
-      count: 1, type: 'file', extension: ['.gpx'],
+      count: 1, 
+      type: 'file', // 彻底放开，让微信系统显示所有文件
       success: res => {
+        const file = res.tempFiles[0];
+        
+        // 自动拦截：如果选了非 GPX 文件，直接报错阻断
+        if (!file.name.toLowerCase().endsWith('.gpx')) {
+          wx.showToast({ 
+            title: '格式错误，只能选 GPX 文件', 
+            icon: 'none',
+            duration: 2000
+          });
+          return;
+        }
+
+        // 校验通过，存入数据
         this.setData({
-          [`groups[${index}].gpxFilePath`]: res.tempFiles[0].path,
-          [`groups[${index}].gpxFileName`]: res.tempFiles[0].name
+          [`groups[${index}].gpxFilePath`]: file.path,
+          [`groups[${index}].gpxFileName`]: file.name
         });
+      },
+      fail: err => {
+        console.log("选择文件失败或取消", err);
       }
     });
   },
@@ -225,20 +248,25 @@ Page({
         await db.collection('races').doc(targetRaceId).update({ data: finalData });
       }
 
+      // 修复：使用 await 保证串行调用，防止数据库并发更新冲突
       if (gpxIndexesToParse.length > 0) {
         for (let idx of gpxIndexesToParse) {
           wx.showLoading({ title: `引擎解析 ${dbGroups[idx].dist} 轨迹...`, mask: true });
-          wx.cloud.callFunction({
-            name: 'syncGpxToDb',
-            data: { raceDocId: targetRaceId, groupIndex: idx, fileID: dbGroups[idx].gpxFileID }
-          }).catch(e => console.error("解析组别失败:", idx, e));
+          try {
+            await wx.cloud.callFunction({
+              name: 'syncGpxToDb',
+              data: { raceDocId: targetRaceId, groupIndex: idx, fileID: dbGroups[idx].gpxFileID }
+            });
+          } catch (e) {
+            console.error("解析组别失败:", idx, e);
+          }
         }
       }
 
       wx.hideLoading();
       wx.showModal({
         title: mode === 'edit' ? '✅ 更新成功' : '🚀 赛事建档成功', 
-        content: gpxIndexesToParse.length > 0 ? '包含新GPX，云端引擎正在后台为您绘制地形雷达图...' : '基础信息已保存，后续可随时补传GPX。',
+        content: gpxIndexesToParse.length > 0 ? '包含新GPX，云端引擎已完成后台地形雷达图解析。' : '基础信息已保存，后续可随时补传GPX。',
         showCancel: false, 
         success: () => wx.navigateBack()
       });

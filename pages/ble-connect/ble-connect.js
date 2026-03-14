@@ -11,6 +11,7 @@ const {
   onBLECharacteristicValueChange
 } = require('../../utils/ble')
 
+// 页面：设备连接，显示扫描到的设备和模拟连接流程
 Page({
   data: {
     isSearching: true,
@@ -207,4 +208,12 @@ Page({
     this.setData({ deviceList: [] })
     this.startDiscovery()
   }
+})
+    // 4. 延迟 1 秒后，自动退回主页面
+    setTimeout(() => {
+      wx.navigateBack();
+    }, 1000);
+    
+  }, 1500);
+}
 })

@@ -25,6 +25,12 @@ Page({
     restRange: [],
     restIndex: 4, 
     globalRestMins: 5,
+
+    // 补给提示配置
+    nutritionRange: [],
+    nutritionIndex: 29, // 默认对应 30m
+    nutritionVal: '30m', 
+
     checkpoints: [],
     blePlanPayload: null,
     K: 1.07,
@@ -197,14 +203,13 @@ Page({
       ctx.fillText(d, px, height - padding.bottom + 4);
     }
 
+    // 纯粹的渐变色绘制
     ctx.beginPath();
     ctx.moveTo(getX(points[0].d), getY(points[0].e));
     points.forEach(p => ctx.lineTo(getX(p.d), getY(p.e)));
-    
     const grd = ctx.createLinearGradient(0, padding.top, 0, height - padding.bottom);
     grd.addColorStop(0, 'rgba(255, 170, 22, 0.4)');
     grd.addColorStop(1, 'rgba(255, 170, 22, 0.0)');
-    
     ctx.lineTo(getX(points[points.length-1].d), height - padding.bottom);
     ctx.lineTo(getX(points[0].d), height - padding.bottom);
     ctx.fillStyle = grd;
@@ -217,6 +222,7 @@ Page({
     ctx.lineWidth = 2;
     ctx.stroke();
 
+    // 触控 Tooltip
     if (touchX !== null && touchX >= 0 && touchX <= width) {
       let closestPoint = points[0];
       let minDiff = Infinity;
@@ -247,7 +253,7 @@ Page({
       ctx.stroke();
 
       const tipW = 74;
-      const tipH = 44;
+      const tipH = 44; 
       let tipX = focusX - tipW / 2;
       let tipY = focusY - tipH - 10;
       
@@ -274,8 +280,9 @@ Page({
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(`${closestPoint.d}km`, tipX + tipW/2, tipY + 14);
+      
       ctx.fillStyle = '#FFAA16';
-      ctx.fillText(`${closestPoint.e}M`, tipX + tipW/2, tipY + 30);
+      ctx.fillText(`${closestPoint.e}m`, tipX + tipW/2, tipY + 30);
     }
   },
 
@@ -295,6 +302,12 @@ Page({
     for(let i=0; i<60; i++) mins.push(i + 'm');
     const rests = [];
     for(let i=1; i<=30; i++) rests.push(i + 'm');
+    
+    // 生成营养补给数组
+    const nutritions = [];
+    for(let i=1; i<=30; i++) nutritions.push(i + 'm');
+    nutritions.push('关闭'); // 此时 '关闭' 刚好在索引 30 的位置
+    for(let i=31; i<=90; i++) nutritions.push(i + 'm');
 
     let h = parseInt(options.h);
     let m = parseInt(options.m);
@@ -308,7 +321,10 @@ Page({
       timeRange: [hours, mins], 
       timeIndex: [finalH, finalM],
       restRange: rests, 
-      restIndex: 4 
+      restIndex: 4,
+      nutritionRange: nutritions, 
+      nutritionVal: '30m',   // 默认初始值
+      nutritionIndex: 29     // '30m' 对应的初始下标
     });
 
     const eventChannel = this.getOpenerEventChannel();
@@ -346,6 +362,10 @@ Page({
             wx.hideLoading();
             const planData = res.data;
             
+            let dbNutritionVal = planData.nutritionVal || '30m';
+            let dbNutritionIndex = nutritions.indexOf(dbNutritionVal);
+            if (dbNutritionIndex === -1) dbNutritionIndex = 29;
+
             this.setData({
               raceId: planData.raceId || '',
               raceDate: planData.raceDate || '',
@@ -355,7 +375,9 @@ Page({
               availableStartTimes: planData.availableStartTimes || [planData.startTime || '07:00'],
               targetHours: planData.targetHours,
               targetMinutes: planData.targetMinutes,
-              timeIndex: [planData.targetHours, planData.targetMinutes]
+              timeIndex: [planData.targetHours, planData.targetMinutes],
+              nutritionVal: dbNutritionVal,
+              nutritionIndex: dbNutritionIndex
             });
             
             this.initData(planData.checkpoints);
@@ -368,6 +390,15 @@ Page({
         });
       }
     }, 100); 
+  },
+
+  onNutritionChange(e) {
+    const index = e.detail.value;
+    const val = this.data.nutritionRange[index];
+    this.setData({ 
+      nutritionIndex: index, 
+      nutritionVal: val 
+    });
   },
 
   onTimeChange(e) {
@@ -434,7 +465,8 @@ Page({
         startEle: i > 0 ? Math.round(arr[i-1].tempEle || 0) : 0,
         endEle: Math.round(cp.tempEle || 0),
         segCutoffMins: segCutoffMins, 
-        cutoffTime: cutoffTime        
+        cutoffTime: cutoffTime,
+        memo: cp.memo || ''
       };
     });
     this.setData({ checkpoints: cps }, () => { this.runFatigueEngine(); });
@@ -551,6 +583,8 @@ Page({
       startTime: this.data.startTime || '07:00',
       targetHours: this.data.targetHours,
       targetMinutes: this.data.targetMinutes,
+      nutritionVal: this.data.nutritionVal, 
+      nutritionIndex: this.data.nutritionIndex, 
       checkpoints: (Array.isArray(checkpoints) ? checkpoints : []).map(cp => ({ ...cp }))
     };
 
@@ -586,6 +620,7 @@ Page({
       ver: 2,
       raceDate: plan.raceDate || '',
       raceName: plan.raceName || '',
+      nutritionAlert: plan.nutritionVal === '关闭' ? 0 : parseInt(plan.nutritionVal), 
       segmentCount: segments.length,
       segments
     };
@@ -635,23 +670,15 @@ Page({
     const errors = [];
 
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-      return {
-        valid: false,
-        errors: ['payload 必须是一个对象'],
-        payload
-      };
+      return { valid: false, errors: ['payload 必须是一个对象'], payload };
     }
 
-    if (payload.ver !== 2) {
-      errors.push('payload.ver 必须为 2');
-    }
-
-    if (typeof payload.raceDate !== 'string' || !payload.raceDate.trim()) {
-      errors.push('payload.raceDate 不能为空');
-    }
-
-    if (typeof payload.raceName !== 'string' || !payload.raceName.trim()) {
-      errors.push('payload.raceName 不能为空');
+    if (payload.ver !== 2) errors.push('payload.ver 必须为 2');
+    if (typeof payload.raceDate !== 'string' || !payload.raceDate.trim()) errors.push('payload.raceDate 不能为空');
+    if (typeof payload.raceName !== 'string' || !payload.raceName.trim()) errors.push('payload.raceName 不能为空');
+    
+    if (payload.nutritionAlert !== undefined && (!Number.isInteger(payload.nutritionAlert) || payload.nutritionAlert < 0)) {
+      errors.push('payload.nutritionAlert 必须是非负整数');
     }
 
     if (!Number.isInteger(payload.segmentCount) || payload.segmentCount < 0) {
@@ -667,39 +694,19 @@ Page({
     if (Array.isArray(payload.segments)) {
       payload.segments.forEach((segment, index) => {
         const label = `segments[${index}]`;
-
         if (!segment || typeof segment !== 'object' || Array.isArray(segment)) {
           errors.push(`${label} 必须是对象`);
           return;
         }
-
-        if (segment.segmentIndex !== index + 1) {
-          errors.push(`${label}.segmentIndex 应为 ${index + 1}`);
-        }
-
-        if (typeof segment.segmentName !== 'string' || !segment.segmentName.trim()) {
-          errors.push(`${label}.segmentName 不能为空`);
-        }
-
-        if (!this.isBleDateTimeString(segment.arrivalTimeBjt)) {
-          errors.push(`${label}.arrivalTimeBjt 格式必须为 YYYY-MM-DD HH:mm`);
-        }
-
-        if (segment.cutoffTimeBjt !== '' && !this.isBleDateTimeString(segment.cutoffTimeBjt)) {
-          errors.push(`${label}.cutoffTimeBjt 必须为空字符串或 YYYY-MM-DD HH:mm`);
-        }
-
-        if (!Number.isInteger(segment.restMin) || segment.restMin < 0) {
-          errors.push(`${label}.restMin 必须是非负整数`);
-        }
+        if (segment.segmentIndex !== index + 1) errors.push(`${label}.segmentIndex 应为 ${index + 1}`);
+        if (typeof segment.segmentName !== 'string' || !segment.segmentName.trim()) errors.push(`${label}.segmentName 不能为空`);
+        if (!this.isBleDateTimeString(segment.arrivalTimeBjt)) errors.push(`${label}.arrivalTimeBjt 格式必须为 YYYY-MM-DD HH:mm`);
+        if (segment.cutoffTimeBjt !== '' && !this.isBleDateTimeString(segment.cutoffTimeBjt)) errors.push(`${label}.cutoffTimeBjt 必须为空字符串或 YYYY-MM-DD HH:mm`);
+        if (!Number.isInteger(segment.restMin) || segment.restMin < 0) errors.push(`${label}.restMin 必须是非负整数`);
       });
     }
 
-    return {
-      valid: errors.length === 0,
-      errors,
-      payload
-    };
+    return { valid: errors.length === 0, errors, payload };
   },
 
   testBlePlanPayload(showModal = true) {
@@ -726,7 +733,6 @@ Page({
         });
       }
     }
-
     return result;
   },
 
@@ -820,6 +826,15 @@ Page({
     this.setData({ checkpoints }, () => this.updateTimesAndPaces(true));
   },
 
+  onMemoInput(e) {
+    const index = e.currentTarget.dataset.index;
+    const val = e.detail.value;
+    this.setData({
+      [`checkpoints[${index}].memo`]: val
+    });
+  },
+
+  // 渲染海报用的原生海拔图
   drawNativeElevationChart(ctx, cpData, chartX, chartY, chartW, chartH, globalMinE, globalMaxE) {
     const points = this.generateMockPoints(cpData);
     if (!points || points.length === 0) return;
@@ -1059,6 +1074,8 @@ Page({
       startTime,
       targetHours,
       targetMinutes,
+      nutritionVal,   
+      nutritionIndex, 
       checkpoints
     } = localPlanSnapshot;
 
@@ -1072,8 +1089,9 @@ Page({
 
     const planData = {
       raceId, raceName, groupDist, raceDate, raceDateMs,
-      startTime, targetHours, targetMinutes, checkpoints,
-      updateTime: db.serverDate()
+      startTime, targetHours, targetMinutes, 
+      nutritionVal, nutritionIndex,  
+      checkpoints, updateTime: db.serverDate()
     };
 
     try {

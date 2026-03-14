@@ -1,3 +1,4 @@
+// 页面：登录注册，显示账号登录和新用户注册
 const app = getApp();
 const db = wx.cloud.database();
 

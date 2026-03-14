@@ -1,229 +1,813 @@
-# AST SYSTEM / TRL-X 微信小程序
+# AST SYSTEM 小程序项目说明文档
 
-一个基于微信小程序原生框架 + 微信云开发实现的越野赛事与配速计划系统。
+本文档基于当前目录 `C:\Users\陈大大\Desktop\12345678` 的实际代码整理，目标是把这个微信小程序的页面、文件、JS 逻辑、云函数、云端数据库和静态资源一次性讲清楚，便于后续维护、交接和继续开发。
 
-项目当前覆盖两类核心场景：
+说明范围：
 
-- 用户侧：浏览赛事、查看组别详情、输入目标完赛时间、生成分段计划、保存计划、查看历史计划、模拟同步到手表
-- 管理侧：创建赛事、编辑赛事、上传封面图/路线图/GPX、调用云函数自动解析 GPX 并回填赛事数据
+- 覆盖当前仓库内所有业务相关文件。
+- `.git/` 属于 Git 元数据目录，不展开说明。
+- `.DS_Store` 这类系统元数据文件会单独说明，但不属于业务逻辑。
 
-## 项目定位
+## 1. 项目是什么
 
-这个项目更接近一个“可运行的业务原型”：
+这是一个基于微信原生小程序和微信云开发实现的越野赛事与配速计划系统，分成两大侧：
 
-- 前端页面完整，主流程已经串起来
-- 依赖微信云开发数据库和云函数
-- 已经具备 GPX 解析、计划生成、图片导出、云端保存等核心能力
-- 仍有少量原型级实现，适合继续迭代，不建议不加改造直接上线生产
+- 用户侧：浏览赛事、查看赛事详情、输入目标完赛时间、生成分段计划、保存计划、查看历史计划、模拟同步到手表。
+- 管理侧：新建赛事、编辑赛事、上传封面图/路线图/GPX 文件、调用云函数解析 GPX 并写回数据库。
 
-## 核心功能
+项目当前特点：
 
-- 赛事列表展示，按日期排序并过滤未来赛事
-- 赛事详情展示，支持多组别切换
-- 根据目标完赛时间生成 CP 分段计划
-- 支持多发枪时间切换
-- 支持统一休息时间或逐段手动调整
-- 支持关门时间超时判断
-- 支持计划保存到云数据库
-- 支持“我的计划”按未来/历史拆分展示
-- 支持导出长图到系统相册
-- 支持模拟蓝牙设备连接与同步
-- 支持后台创建/编辑/删除赛事
-- 支持上传 GPX 并异步解析距离、爬升、CP 数据
+- 页面完整，主流程是可跑通的。
+- 大部分数据库读写直接在前端完成。
+- BLE 连接和同步目前是模拟流程，不是真实蓝牙通信。
+- 登录方案是原型级实现，`users` 集合里目前是明文密码。
 
-## 技术栈
+## 2. 页面路由总览
 
-- 微信小程序原生框架
-- 微信云开发 `wx.cloud`
-- 云数据库
-- 云函数 `wx-server-sdk`
-- 原生 Canvas 绘制海拔图和分享长图
+`app.json` 中注册了 10 个页面，实际业务关系如下：
 
-项目没有引入额外前端框架，也没有顶层 `package.json`。依赖主要在云函数目录内维护。
+| 路由 | 页面名称 | 主要职责 | 主要依赖 |
+| --- | --- | --- | --- |
+| `pages/index/index` | 首页 / 我的产品 | 查看连接状态、近期计划、近期赛事 | `races`、`user_plans`、`app.globalData` |
+| `pages/profile/profile` | 个人中心 | 登录入口、退出登录、控制台入口 | `app.globalData` |
+| `pages/race-list/race-list` | 全部比赛 | 搜索、筛选、分组展示赛事 | `races` |
+| `pages/race-detail/race-detail` | 比赛详情 | 查看赛事基础信息、组别、路线图、生成计划入口 | `races` |
+| `pages/plan-result/plan-result` | 计划结果页 | 计算分段计划、导出图片、保存云端、模拟同步手表 | `user_plans`、本地快照、BLE 载荷 |
+| `pages/my-plans/my-plans` | 全部计划 | 展示未来/历史计划、滑动删除 | `user_plans` |
+| `pages/ble-connect/ble-connect` | 设备连接页 | 模拟扫描设备和连接流程 | `app.globalData` |
+| `pages/login/login` | 登录/注册 | 直接对 `users` 集合做登录和注册 | `users`、`app.globalData` |
+| `pages/admin-race-add/admin-race-add` | 管理控制台 | 新建/编辑赛事、上传资源、触发 GPX 解析 | `races`、云存储、`syncGpxToDb` |
+| `pages/admin-race-list/admin-race-list` | 历史赛事库 | 管理端赛事列表、删除、进入编辑 | `races` |
 
-## 项目结构
+页面主流程：
 
-```text
-.
-├─app.js                         小程序入口，初始化云环境
-├─app.json                       页面与全局窗口配置
-├─images/                        图标与二维码资源
-├─pages/
-│  ├─index/                      首页
-│  ├─race-list/                  赛事列表
-│  ├─race-detail/                赛事详情 + 计划入口
-│  ├─plan-result/                计划结果页
-│  ├─my-plans/                   我的计划
-│  ├─ble-connect/                蓝牙连接页（当前为模拟）
-│  ├─login/                      登录 / 注册
-│  ├─profile/                    个人中心
-│  ├─admin-race-add/             新建 / 编辑赛事
-│  └─admin-race-list/            管理后台赛事列表
-├─cloudfunctions/
-│  ├─parseGpx/                   GPX 解析测试云函数
-│  └─syncGpxToDb/                GPX 解析并回写数据库
-└─utils/                         预留工具目录
+1. 管理员在控制台新建赛事并上传 GPX。
+2. `syncGpxToDb` 解析 GPX，把距离、爬升、CP 数据写回 `races`。
+3. 用户在首页或赛事列表进入赛事详情。
+4. 用户输入目标完赛时间后进入计划结果页。
+5. 计划结果页按赛段计算移动时间、休息时间、到达时间、关门判定。
+6. 用户可保存到 `user_plans`，也可走模拟手表同步流程。
+
+## 3. 云开发总览
+
+### 3.1 云环境
+
+`app.js` 里写死了当前云开发环境：
+
+- 云环境 ID：`cloud1-8g7flmwwa4402751`
+- `traceUser: true`
+
+### 3.2 当前用到的云能力
+
+- 云数据库：`races`、`user_plans`、`users`
+- 云存储：赛事封面、赛事路线图、GPX 文件
+- 云函数：
+  - `parseGpx`
+  - `syncGpxToDb`
+
+### 3.3 云存储目录约定
+
+管理端上传文件时采用以下目录：
+
+- `race-covers/`：赛事主封面
+- `race-maps/`：组别路线图
+- `gpx-tracks/`：组别 GPX 文件
+
+### 3.4 当前数据流
+
+#### 赛事建档数据流
+
+1. `pages/admin-race-add/admin-race-add.js`
+2. 上传封面图、路线图、GPX 到云存储
+3. 向 `races` 写入基础赛事文档
+4. 对新上传的 GPX 调用 `syncGpxToDb`
+5. 云函数更新 `groups[n].checkpoints`、`actualDist`、`elevation`
+
+#### 计划生成数据流
+
+1. `pages/race-detail/race-detail.js` 读取 `races`
+2. 组装当前组别的 `checkpoints`、距离、爬升、发枪时间
+3. 通过 `EventChannel` 把草稿数据传给 `pages/plan-result/plan-result.js`
+4. `plan-result.js` 计算分段时间、休息、配速、关门判定
+5. 可选择：
+   - 保存到 `user_plans`
+   - 构建 BLE 载荷并模拟“同步手表”
+
+## 4. 云数据库详细说明
+
+当前真正承载业务的是 3 个集合：`races`、`user_plans`、`users`。
+
+### 4.1 `races` 集合
+
+用途：保存比赛主数据，是整个系统最核心的数据表。
+
+#### 顶层字段
+
+| 字段 | 类型 | 来源 | 说明 |
+| --- | --- | --- | --- |
+| `_id` | string | 云数据库自动生成 | 赛事主键 |
+| `name` | string | 管理端填写 | 赛事名称 |
+| `location` | string | 管理端填写 | 举办地点 |
+| `date` | string | 管理端填写 | 比赛日期，页面里按字符串解析成年月日 |
+| `hasItra` | boolean | 管理端开关 | 是否显示 ITRA 标识 |
+| `coverImg` | string | 云存储 fileID | 赛事封面图 |
+| `tags` | array | 管理端组别生成 | 首页/列表页展示的组别标签 |
+| `groups` | array | 管理端维护 | 赛事的所有距离组别 |
+| `createTime` | serverDate | 前端创建时写入 | 创建时间 |
+| `updateTime` | serverDate | 前端更新时写入 | 更新时间 |
+
+#### `tags[]` 结构
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `dist` | string | 如 `50km`、`100km` |
+| `color` | string | 组别主题色，供列表页标签使用 |
+
+#### `groups[]` 结构
+
+| 字段 | 类型 | 来源 | 说明 |
+| --- | --- | --- | --- |
+| `dist` | string | 管理端填写 | 组别简称 |
+| `actualDist` | string | 云函数回写 | 实际距离，如 `52.4km` |
+| `elevation` | string | 云函数回写 | 爬升/下降摘要，如 `3120m+ / 2980m-` |
+| `cutoffTime` | string | 管理端填写 | 整组关门描述，主要用于详情页展示 |
+| `themeColor` | string | 管理端选择 | 页面按钮和标签配色 |
+| `startTime` | string | 管理端填写 | 第一发枪时间 |
+| `startTime2` | string/null | 管理端填写 | 第二发枪时间，可为空 |
+| `detailMapImg` | string | 云存储 fileID | 组别路线图 |
+| `gpxFileID` | string | 云存储 fileID | 原始 GPX 文件 |
+| `checkpoints` | array | 云函数回写 | 赛道 CP/DP/终点数据 |
+
+#### `groups[].checkpoints[]` 持久化字段
+
+这些字段由 `syncGpxToDb` 生成并存入数据库：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `name` | string | CP 名称，若 GPX 名称尾部带 `-HH:mm`，该时间会被剥离后留下纯净名称 |
+| `accDist` | number | 累计距离，单位 km |
+| `accGain` | number | 累计爬升，单位 m |
+| `accLoss` | number | 累计下降，单位 m |
+| `tempEle` | number/null | 该点海拔 |
+| `svgProfile` | string | 轻量级海拔图，供列表快速显示 |
+| `rawPoints` | array | 原始采样高程点，供交互式图表使用 |
+| `isDropBag` | boolean | 是否为换装点 / DP |
+| `rest` | number | 默认休息分钟数，普通点 5，换装点 30 |
+| `cutoffTime` | string | 从点名里提取的关门时间，如 `16:00` |
+| `segDist` | number | 分段距离 |
+| `segGain` | number | 分段爬升 |
+| `segLoss` | number | 分段下降 |
+
+#### `checkpoints` 的运行期扩展字段
+
+这些字段不是云端固定 schema，而是 `pages/plan-result/plan-result.js` 在 `initData()` 或 `updateTimesAndPaces()` 内临时补充：
+
+- `cpNum`
+- `locName`
+- `moveMins`
+- `eqDist`
+- `pace`
+- `eqPace`
+- `arrTime`
+- `depTime`
+- `arrAbsoluteMins`
+- `depAbsoluteMins`
+- `absoluteCutoffMins`
+- `displayCutoffTime`
+- `isOvertime`
+
+也就是说：
+
+- `races` 负责提供赛道基础事实。
+- `plan-result.js` 负责把这些事实加工成“计划”。
+
+### 4.2 `user_plans` 集合
+
+用途：保存用户已经生成并确认的计划。
+
+当前保存逻辑位于 `pages/plan-result/plan-result.js` 的 `uploadPlanToCloud()` 中，采用“按 `raceId + groupDist` 查重”的方式：
+
+- 已存在：更新原文档
+- 不存在：新增文档
+
+这意味着当前系统默认“同一赛事组别只保留一份最新计划”。
+
+#### 字段结构
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `_id` | string | 计划主键 |
+| `raceId` | string | 对应 `races._id` |
+| `raceName` | string | 页面展示名称，通常是 `赛事名 - 组别` |
+| `groupDist` | string | 组别简称 |
+| `raceDate` | string | 比赛日期 |
+| `raceDateMs` | number | 日期时间戳，用于未来/历史排序 |
+| `startTime` | string | 用户所选发枪时间 |
+| `targetHours` | number | 目标小时 |
+| `targetMinutes` | number | 目标分钟 |
+| `checkpoints` | array | 保存当时整份计划的 CP 数据，包括移动时间、休息、配速等 |
+| `createTime` | serverDate | 首次创建时间 |
+| `updateTime` | serverDate | 最近更新时间 |
+
+注意：
+
+- 当前代码读取计划时尝试读取 `availableStartTimes`，但保存时没有写入该字段，所以重新打开历史计划时通常只能还原一个 `startTime`。
+- 首页和“我的计划”页面都直接读取 `user_plans`，没有用户隔离字段，所以当前实现默认是一个公共计划池。
+
+### 4.3 `users` 集合
+
+用途：登录和注册。
+
+#### 字段结构
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `_id` | string | 用户主键 |
+| `username` | string | 用户名 |
+| `password` | string | 明文密码 |
+| `role` | string | 角色，当前用 `user` 或 `admin` |
+| `createdAt` | serverDate | 注册时间 |
+
+#### 当前实现方式
+
+`pages/login/login.js` 直接在前端查询：
+
+- 登录：`where({ username, password })`
+- 注册：先查重，再 `add()`
+
+这说明当前登录体系是原型版本，主要问题有：
+
+- 明文密码
+- 前端直连数据库
+- 没有基于 `openid` 的身份绑定
+- `isAdmin` 仅保存在前端全局变量里
+
+## 5. 根目录文件说明
+
+| 文件 | 归属 | 作用 | 详细说明 |
+| --- | --- | --- | --- |
+| `app.js` | 全局入口 | 初始化云环境与全局状态 | 小程序启动时执行 `wx.cloud.init()`；`globalData` 里维护 `isConnected`、`deviceName`，并被首页、设备页、计划页读取 |
+| `app.json` | 全局配置 | 注册页面、窗口样式、tabBar | 定义 10 个页面；导航栏统一黑底白字；tabBar 仅声明首页和个人中心，但实际页面里又自己画了一套自定义底部导航 |
+| `app.wxss` | 全局样式 | 隐藏滚动条 | 全局移除滚动条外观，避免暗黑界面中出现默认滚动条 |
+| `project.config.json` | 开发工具配置 | 微信开发者工具项目配置 | 指定 `cloudfunctionRoot`、`appid`、基础库版本 `3.11.1`、压缩与编译选项 |
+| `project.private.config.json` | 本地私有配置 | 开发者工具本机偏好 | 只影响本机开发体验，不参与业务逻辑 |
+| `.gitignore` | 仓库管理 | 忽略系统垃圾与依赖目录 | 忽略 Windows/macOS 系统文件以及 `node_modules/` |
+| `.DS_Store` | 系统元数据 | macOS Finder 缓存文件 | 与业务无关，可忽略 |
+| `BLE_PAYLOAD_DEV_GUIDE.md` | 开发文档 | 解释 BLE 载荷结构 | 详细说明 `plan-result.js` 里 BLE 载荷从何而来、字段含义、测试函数、发送建议 |
+| `README.md` | 当前文档 | 项目说明主文档 | 本文件，已经覆盖旧版 README |
+
+## 6. 页面文件说明
+
+下面按页面目录解释每个页面的四件套文件：`.js`、`.wxml`、`.wxss`、`.json`。
+
+### 6.1 首页 `pages/index`
+
+对应页面：用户首页 / 我的产品
+
+#### 文件说明
+
+| 文件 | 作用 |
+| --- | --- |
+| `pages/index/index.js` | 拉取赛事和计划数据，控制连接状态展示与跳转 |
+| `pages/index/index.wxml` | 首页结构，包含设备状态区、计划列表、赛事列表、自定义底部导航 |
+| `pages/index/index.wxss` | 首页整体暗黑风样式、自定义卡片、自定义底部导航样式 |
+| `pages/index/index.json` | 配置导航栏标题为 `TRL-X`，禁用原生滚动 |
+
+#### JS 核心逻辑
+
+- `onLoad()`：首次拉取云端赛事和我的计划。
+- `onShow()`：隐藏原生 tabBar，并从 `app.globalData` 恢复设备连接状态。
+- `fetchCloudRaces()`：
+  - 读取 `races`
+  - 使用 `parseTime()` 把日期字符串转时间戳
+  - 仅保留今天及未来赛事
+- `fetchMyPlans()`：
+  - 读取 `user_plans`
+  - 计算 `daysLeft`
+  - 去掉 `raceName` 中重复的组别文案，生成 `pureRaceName`
+- 跳转函数：
+  - `goToMyPlan()` 进入已保存计划
+  - `goToMorePlans()` 进入“我的计划”
+  - `goToDetail()` 进入赛事详情
+  - `goToConnect()` 进入设备页
+
+#### 视图层说明
+
+- `index.wxml` 把连接状态分成“未连接”和“已连接”两种头部卡片。
+- 已导入计划区最多展示 3 条。
+- 下半部分展示未来赛事卡片。
+- 页脚不是原生 tabBar，而是手动绘制的底部导航。
+
+### 6.2 全部比赛 `pages/race-list`
+
+对应页面：赛事搜索与筛选页
+
+#### 文件说明
+
+| 文件 | 作用 |
+| --- | --- |
+| `pages/race-list/race-list.js` | 拉取全部赛事并实现搜索、地区、距离、时间、ITRA、排序筛选 |
+| `pages/race-list/race-list.wxml` | 搜索框、筛选按钮、月份分组列表、底部抽屉筛选面板 |
+| `pages/race-list/race-list.wxss` | 列表页暗黑卡片风格与 iOS 风格筛选抽屉样式 |
+| `pages/race-list/race-list.json` | 启用自定义导航栏 |
+
+#### JS 核心逻辑
+
+- `fetchCloudRaces()`：拉取 `races` 后为每项补 `timeMs`，默认按时间升序。
+- `applyFilters()`：整页的核心过滤引擎，依次处理：
+  - 搜索词
+  - ITRA
+  - 地区
+  - 距离区间
+  - 时间范围
+  - 排序方向
+- `groupAndRenderRaces()`：把结果按 `年-月` 分组，供 WXML 按月份渲染。
+- `onRegionChange()`：把微信 `picker mode="region"` 返回的 3 级地区转换成适合显示的文案。
+- `confirmFilters()`：统计激活筛选数，用于红点提醒。
+
+#### 视图层说明
+
+- 顶部自定义导航栏包含返回按钮。
+- 中间是搜索框和筛选按钮。
+- 下方主列表按月份分组显示赛事。
+- 底部筛选面板是抽屉式弹层，包含 ITRA、距离、地区、日期范围和排序方式。
+
+### 6.3 比赛详情 `pages/race-detail`
+
+对应页面：赛事详情页 + 制定计划入口
+
+#### 文件说明
+
+| 文件 | 作用 |
+| --- | --- |
+| `pages/race-detail/race-detail.js` | 拉取单场赛事、切换组别、切换 Tab、校验输入并向计划页传参 |
+| `pages/race-detail/race-detail.wxml` | 展示封面、基本信息、组别切换、详情/计划两个 Tab |
+| `pages/race-detail/race-detail.wxss` | 赛事头图卡片、组别滑块、Tab 滑块、时间输入区和底部按钮样式 |
+| `pages/race-detail/race-detail.json` | 启用自定义导航栏 |
+
+#### JS 核心逻辑
+
+- `onLoad(options)`：
+  - 读取路由参数 `id`
+  - 对 `races` 做双兼容查询：`id` 或 `_id`
+  - 命中后写入 `raceInfo`
+- `switchGroup()`：切换当前组别，并把发枪选择重置到第一个。
+- `switchTab()`：在“比赛详细”和“制定计划”之间切换。
+- `generatePlan()`：
+  - 校验是否输入目标时间
+  - 校验当前组别是否已有 `checkpoints`
+  - 根据 `selectedStartTimeIndex` 选出发枪时间
+  - 交给 `executeJump()`
+- `executeJump(selectedStartTime)`：
+  - 把 `raceId`、`raceDate`、`groupDist`、`checkpoints`、`actualDist`、`elevation`、`availableStartTimes` 等信息打成草稿包
+  - 通过 `wx.navigateTo + EventChannel` 传给 `plan-result`
+
+#### 视图层说明
+
+- `wxml` 上半部分展示赛事封面、日期、地点和 ITRA 标记。
+- 中间用滑块样式切换组别。
+- 下半部分通过 Tab 切换“详情展示”和“目标时间输入”。
+- 计划区域支持一发和二发两个发枪批次的胶囊选择。
+
+### 6.4 计划结果页 `pages/plan-result`
+
+对应页面：核心算法页 / 路书页 / 导出页 / 模拟同步页
+
+这是整个项目最复杂的页面，也是所有业务逻辑最密集的文件。
+
+#### 文件说明
+
+| 文件 | 作用 |
+| --- | --- |
+| `pages/plan-result/plan-result.js` | 负责计划算法、时间推导、关门判定、图表、海报、云端保存、BLE 载荷生成和模拟同步 |
+| `pages/plan-result/plan-result.wxml` | 顶部配置区、CP 列表、详情抽屉、海报画布、连接/成功弹窗 |
+| `pages/plan-result/plan-result.wxss` | 整页暗黑仪表风 UI、详情底部抽屉、长图画布、弹窗样式 |
+| `pages/plan-result/plan-result.json` | 启用自定义导航栏并禁用原生滚动 |
+
+#### JS 核心逻辑分解
+
+##### 1. 页面初始化
+
+- `onLoad(options)`：
+  - 初始化时间选择器和休息时间选择器
+  - 优先接收上一页通过 `EventChannel` 传来的赛事草稿
+  - 如果没有事件通道数据且路由里有 `id`，则从 `user_plans` 读取历史计划
+
+##### 2. 计划数据标准化
+
+- `initData(rawCps)`：
+  - 基于累计距离/爬升推导每段 `segDist`、`segGain`、`segLoss`
+  - 识别 `DP` 或“换装”点，设置默认休息为 30 分钟
+  - 解析点名，把 `CP1-大热换倒-16:00` 这类名字拆成：
+    - `cpNum`
+    - `locName`
+    - `cutoffTime`
+  - 初始化 `moveMins`、默认 `rest` 等字段
+
+##### 3. 配速与疲劳计算
+
+- `runFatigueEngine()` 是核心算法：
+  - 目标总时间：`targetHours * 60 + targetMinutes`
+  - 每段等强距离：`segED = segDist + segGain / 100`
+  - 总等强距离：`totalED = sum(segED)`
+  - 总休息时间：`sum(rest)`
+  - 可移动时间：`movingMins = targetMins - totalRest`
+  - 疲劳指数：`K = 1.07`
+  - 使用累计法分配每段移动时间，避免逐段四舍五入误差累积
+
+##### 4. 时间与关门线推导
+
+- `updateTimesAndPaces()`：
+  - 从发枪时间出发推导每个 CP 的到达/离开时间
+  - 支持两种关门来源：
+    - 赛段相对关门分钟数 `segCutoffMins`
+    - 点名中提取出的绝对时刻 `cutoffTime`
+  - 支持跨天关门时间
+  - 计算：
+    - `arrTime`
+    - `depTime`
+    - `displayCutoffTime`
+    - `isOvertime`
+    - `pace`
+    - `eqPace`
+
+##### 5. BLE 载荷
+
+- `saveLocalPlanSnapshot()`：保存当前计划快照。
+- `buildBlePlanPayload()`：把计划转换成手表侧需要的轻量数据。
+- `validateBlePlanPayload()`：校验格式。
+- `testBlePlanPayload()`：生成并输出调试结果。
+
+最终 BLE 载荷结构为：
+
+```json
+{
+  "ver": 2,
+  "raceDate": "2026-10-01",
+  "raceName": "某赛事 - 50km",
+  "segmentCount": 3,
+  "segments": [
+    {
+      "segmentIndex": 1,
+      "segmentName": "CP1 - 补给站",
+      "arrivalTimeBjt": "2026-10-01 09:58",
+      "cutoffTimeBjt": "2026-10-01 10:30",
+      "restMin": 5
+    }
+  ]
+}
 ```
 
-## 页面说明
+##### 6. 导出长图
 
-### 1. 首页 `pages/index`
+- `savePlanImage()`：
+  - 使用 `canvas type="2d"` 生成长图
+  - 头部显示赛事名和总计划
+  - 中段逐行绘制 CP 数据与海拔图
+  - 底部绘制 `/images/qrcode.png`
+  - 保存到系统相册
 
-职责：
+##### 7. 保存云端
 
-- 展示当前设备连接状态
-- 展示已导入的计划（最多 3 条）
-- 展示云端赛事列表
+- `uploadPlanToCloud()`：
+  - 计算 `raceDateMs`
+  - 组装 `planData`
+  - 按 `raceId + groupDist` 查重后执行更新或新增
 
-主要行为：
+##### 8. 模拟同步硬件
 
-- 读取 `races` 集合，按日期排序后仅展示今天及未来赛事
-- 读取 `user_plans` 集合，展示即将参赛的计划
-- 根据 `app.globalData.isConnected` 显示设备连接状态
+- `syncToHardware()`：若未连接则弹窗；已连接则走同步流程。
+- `executeSyncAnimation()`：
+  - 先上传计划到云端
+  - 再构建 BLE 载荷并打印日志
+  - 用 `setTimeout` 模拟“打包路书”和“蓝牙传输中”
 
-### 2. 赛事列表 `pages/race-list`
+#### 视图层说明
 
-职责：
+- 顶部吸顶区域可调“计划用时 / 发枪时间 / 平均休息”。
+- 中部是 CP 列表，每行能直接编辑赛段用时和休息时间。
+- 点击某一行可以打开底部详情抽屉，查看海拔图、配速、关门时间等。
+- 页面底部有“保存图片”和“同步至手表”两个主操作。
+- 隐藏的 `shareCanvas` 专供导出海报，不直接显示。
 
-- 展示全部赛事
-- 点击后进入赛事详情页
+### 6.5 我的计划 `pages/my-plans`
 
-### 3. 赛事详情 `pages/race-detail`
+对应页面：用户计划总表
 
-职责：
+#### 文件说明
 
-- 展示赛事基础信息、封面、地点、ITRA 标识
-- 在多个组别之间切换
-- 查看组别距离、爬升、关门时间、路线图
-- 输入目标完赛时间后跳转至计划结果页
+| 文件 | 作用 |
+| --- | --- |
+| `pages/my-plans/my-plans.js` | 拉取计划、按未来/历史分类、实现滑动删除和进入详情 |
+| `pages/my-plans/my-plans.wxml` | 顶部 Tab、计划列表、滑动删除按钮、空状态 |
+| `pages/my-plans/my-plans.wxss` | 列表卡片和 swipe-to-delete 动画样式 |
+| `pages/my-plans/my-plans.json` | 自定义导航栏配置 |
 
-计划生成前置条件：
+#### JS 核心逻辑
 
-- 当前组别必须已经有 `checkpoints`
-- 用户至少输入小时或分钟其中之一
+- `fetchPlans()`：
+  - 读取 `user_plans`
+  - 计算 `pureRaceName`
+  - 计算 `daysLeft`
+  - 拆成 `futurePlans` 和 `historyPlans`
+- `switchTab()`：在“即将参赛”和“历史足迹”之间切换。
+- `onTouchStart / onTouchMove / onTouchEnd()`：实现左滑显示删除按钮。
+- `deletePlan()`：删除 `user_plans` 文档后刷新列表。
+- `goToMyPlan()`：进入 `plan-result?id=计划ID`。
 
-### 4. 计划结果 `pages/plan-result`
+#### 视图层说明
 
-职责：
+- 顶部是两个 Tab。
+- 中间列表每项都可左滑露出红色删除按钮。
+- 未来计划显示剩余天数，历史计划显示“已完赛”。
 
-- 读取赛事 CP 数据并计算每段用时
-- 根据发枪时间推导每个 CP 的到达/离开时间
-- 计算实际配速与等效配速
-- 判断关门时间是否超时
-- 支持保存计划、导出长图、模拟同步到手表
+### 6.6 设备连接 `pages/ble-connect`
 
-主要特性：
+对应页面：模拟 BLE 扫描与连接
 
-- 支持统一调整全局休息时间
-- 支持逐段手动调整移动时间和休息时间
-- 支持查看分段海拔图
-- 支持保存图片到相册
-- 支持保存到 `user_plans`
+#### 文件说明
 
-### 5. 我的计划 `pages/my-plans`
+| 文件 | 作用 |
+| --- | --- |
+| `pages/ble-connect/ble-connect.js` | 提供假设备列表并模拟连接流程 |
+| `pages/ble-connect/ble-connect.wxml` | 雷达扫描动画和设备卡片列表 |
+| `pages/ble-connect/ble-connect.wxss` | 扫描波纹动画、信号条、设备卡片样式 |
+| `pages/ble-connect/ble-connect.json` | 自定义导航栏配置 |
 
-职责：
+#### JS 核心逻辑
 
-- 从 `user_plans` 中读取当前用户计划
-- 按 `raceDateMs` 拆分为未来计划和历史计划
+- `deviceList` 是写死的测试数据。
+- `connectDevice(e)`：
+  - 显示加载中
+  - 1.5 秒后视为连接成功
+  - 写入 `app.globalData.isConnected = true`
+  - 写入 `app.globalData.deviceName`
+  - 自动返回上一页
 
-### 6. 蓝牙连接 `pages/ble-connect`
+#### 视图层说明
 
-职责：
+- 页面上半部分是“正在搜索附近的腕表”雷达动画。
+- 下半部分是可点击的设备卡片。
+- 信号条依据 `signal` 值控制高亮数量。
 
-- 展示设备列表
-- 模拟扫描与连接流程
+### 6.7 登录 / 注册 `pages/login`
 
-当前实现说明：
+对应页面：登录与注册页
 
-- 设备列表为写死的假数据
-- 连接流程由 `setTimeout` 模拟
-- 成功后只会修改全局状态，不会进行真实 BLE 通信
+#### 文件说明
 
-### 7. 登录/注册 `pages/login`
+| 文件 | 作用 |
+| --- | --- |
+| `pages/login/login.js` | 执行登录和注册，修改全局登录状态 |
+| `pages/login/login.wxml` | 登录/注册切换、账号密码输入、提交按钮 |
+| `pages/login/login.wxss` | 登录页整套黑橙配色样式 |
+| `pages/login/login.json` | 自定义导航栏配置 |
 
-职责：
+#### JS 核心逻辑
 
-- 登录：查询 `users` 集合中的账号密码
-- 注册：向 `users` 集合新增用户
+- `switchMode()`：在登录和注册之间切换，并清空输入框。
+- `handleSubmit()`：
+  - 登录模式：
+    - 查询 `users` 集合是否存在 `username + password`
+    - 命中后写 `app.globalData.isLoggedIn`、`userName`、`isAdmin`
+  - 注册模式：
+    - 先判断用户名是否已存在
+    - 不存在则向 `users` 插入新文档
+- `goBack()`：返回个人中心。
 
-当前实现说明：
+#### 当前实现特点
 
-- 账号密码为明文存储
-- 登录校验发生在前端直接查库
-- 这是原型方案，生产环境必须替换
+- 账号密码校验完全在前端完成。
+- `role === 'admin'` 会被转成全局 `isAdmin`。
+- 没有 token、session、云函数鉴权。
 
-### 8. 个人中心 `pages/profile`
+### 6.8 个人中心 `pages/profile`
 
-职责：
+对应页面：用户信息页 / 控制台入口页
 
-- 展示登录状态
-- 提供登录入口
-- 提供管理后台入口
+#### 文件说明
 
-### 9. 管理后台新增/编辑赛事 `pages/admin-race-add`
+| 文件 | 作用 |
+| --- | --- |
+| `pages/profile/profile.js` | 展示登录状态、退出登录、进入控制台、测试 GPX 解析 |
+| `pages/profile/profile.wxml` | 用户卡片、控制台入口、菜单、自定义底部导航 |
+| `pages/profile/profile.wxss` | 个人中心整体布局和控制台入口样式 |
+| `pages/profile/profile.json` | 自定义导航栏配置 |
 
-职责：
+#### JS 核心逻辑
 
-- 新建赛事基础信息
-- 配置多个组别
-- 上传赛事封面、组别路线图、GPX 文件
-- 保存赛事到 `races`
-- 对新上传 GPX 的组别异步调用 `syncGpxToDb`
+- `onShow()`：从 `app.globalData` 同步 `isLoggedIn`、`userName`、`isAdmin`。
+- `handleCardClick()`：
+  - 未登录：进入登录页
+  - 已登录：弹窗确认退出登录
+- `goToAdminPortal()`：进入管理控制台。
+- `testParseGpx()`：手动调用 `parseGpx`，主要用于云函数调试。
 
-### 10. 管理后台赛事列表 `pages/admin-race-list`
+#### 当前页面行为说明
 
-职责：
+- 虽然 JS 里维护了 `isAdmin`，但 WXML 里的控制台入口写成了 `wx:if="{{true}}"`，所以当前所有人都能看到控制台入口。
+- 页面底部同样使用手工绘制 tabBar。
 
-- 读取全部赛事
-- 进入编辑模式
-- 删除赛事
+### 6.9 管理控制台 `pages/admin-race-add`
 
-## 云函数说明
+对应页面：新建 / 编辑赛事
 
-### `cloudfunctions/parseGpx`
+#### 文件说明
 
-用途：
+| 文件 | 作用 |
+| --- | --- |
+| `pages/admin-race-add/admin-race-add.js` | 负责赛事表单、资源上传、保存 `races`、触发 GPX 解析 |
+| `pages/admin-race-add/admin-race-add.wxml` | 全局赛事档案表单、组别表单、GPX 上传入口、底部提交按钮 |
+| `pages/admin-race-add/admin-race-add.wxss` | 控制台深色表单样式、组别卡片样式、底部固定提交按钮 |
+| `pages/admin-race-add/admin-race-add.json` | 默认导航栏标题 `AST 控制台` |
 
-- 下载 GPX 文件
-- 解析轨迹点 `trkpt`
-- 解析路标点 `wpt`
-- 计算总距离、累计爬升、累计下降
-- 生成草稿版 checkpoint 数据并返回前端
+#### JS 核心逻辑
 
-特点：
+- 页面模式：
+  - `mode: 'create'`
+  - `mode: 'edit'`
+- `onLoad(options)`：
+  - 有 `id` 则进入编辑模式
+  - 调用 `loadRaceData(id)` 回填表单
+- `loadRaceData()`：
+  - 从 `races` 读取文档
+  - 回填顶层信息和各组别
+  - 同时记住老文件 `oldCoverFileId`、`oldMapFileId`、`oldGpxFileId`
+- `chooseCoverImg()`、`chooseGroupMap()`、`chooseGroupGpx()`：选择本地媒体或 GPX 文件。
+- `uploadToCloud(localPath, folderName)`：
+  - 如果已经是 `cloud://` 则直接复用
+  - 如果是临时文件则上传到对应云目录
+- `submitAndIgnite()`：
+  - 先上传封面、地图、GPX
+  - 组装 `tags` 和 `groups`
+  - 写入或更新 `races`
+  - 对新上传的 GPX 调用 `syncGpxToDb`
 
-- 主要适合调试或单独验证 GPX 解析效果
-- 当前不会回写数据库
+#### 与数据库的关系
 
-### `cloudfunctions/syncGpxToDb`
+- 这个页面是 `races` 集合的主要写入口。
+- 它先写“基础赛事文档”，再由云函数补齐 `checkpoints`、`actualDist`、`elevation`。
 
-用途：
+### 6.10 历史赛事库 `pages/admin-race-list`
 
-- 下载并解析指定组别的 GPX
-- 根据 WPT 名称顺序匹配轨迹位置
-- 生成组别 `checkpoints`
-- 计算 `actualDist`、`elevation`
-- 回写到 `races.groups[groupIndex]`
+对应页面：管理端赛事列表
 
-额外能力：
+#### 文件说明
 
-- 抽取分段原始海拔点 `rawPoints`
-- 生成轻量海拔 `svgProfile`
-- 支持从路标名称末尾提取关门时间，例如 `CP3-16:00`
+| 文件 | 作用 |
+| --- | --- |
+| `pages/admin-race-list/admin-race-list.js` | 拉取赛事、删除赛事、跳转编辑 |
+| `pages/admin-race-list/admin-race-list.wxml` | 列出历史赛事卡片并提供删除按钮 |
+| `pages/admin-race-list/admin-race-list.wxss` | 历史赛事列表卡片样式 |
+| `pages/admin-race-list/admin-race-list.json` | 自定义导航栏，禁用页面滚动 |
 
-## GPX 约定
+#### JS 核心逻辑
 
-为保证解析稳定，建议 GPX 文件满足以下约定：
+- `onShow()`：每次页面显示都刷新赛事列表。
+- `fetchRaces()`：按 `createTime desc` 拉取 `races`。
+- `goToEdit()`：进入 `admin-race-add?id=赛事ID`。
+- `deleteRace()`：确认后删除对应赛事文档。
 
-- 轨迹点使用标准 `trkpt`
-- 路标点使用标准 `wpt`
-- 起终点命名建议使用 `START` / `FINISH`
-- 检查点命名建议使用 `CP1`、`CP2`、`CP3`
-- 换装点命名建议使用 `DP1`、`DP2`
-- 如果需要自动识别关门时间，可在点名末尾追加 `-HH:mm`
+#### 视图层说明
 
-例如：
+- 每张卡片显示：
+  - 赛事名称
+  - 日期和地点
+  - 所有组别标签
+  - “点击编辑”提示
+  - 删除按钮
+
+## 7. 云函数文件说明
+
+### 7.1 `cloudfunctions/parseGpx`
+
+这个云函数更像“解析实验室”，主要用于调试 GPX 解析效果，不负责回写数据库。
+
+| 文件 | 作用 |
+| --- | --- |
+| `cloudfunctions/parseGpx/index.js` | 下载 GPX、解析轨迹点和路标点，返回草稿 checkpoint 数据 |
+| `cloudfunctions/parseGpx/package.json` | 云函数依赖定义，依赖 `wx-server-sdk ~2.6.3` |
+| `cloudfunctions/parseGpx/config.json` | 云函数配置，超时 60 秒，无额外 openapi 权限 |
+
+#### `index.js` 核心逻辑
+
+- 下载云存储里的 GPX 文件。
+- 用正则提取所有 `<trkpt>`：
+  - 计算 3D 距离
+  - 计算累计爬升和下降
+- 用正则提取所有 `<wpt>`：
+  - 识别 `START`、`FINISH`、`CPn`、`DPn`
+  - 过滤水站、医疗、路标等黑名单点
+- 用滑窗方式把路标点匹配到轨迹点。
+- 最终返回：
+  - `draft.name`
+  - `draft.checkpoints`
+
+当前调用入口：
+
+- `pages/profile/profile.js` 的 `testParseGpx()`
+
+### 7.2 `cloudfunctions/syncGpxToDb`
+
+这是当前正式业务链路里真正使用的 GPX 解析函数。
+
+| 文件 | 作用 |
+| --- | --- |
+| `cloudfunctions/syncGpxToDb/index.js` | 下载 GPX、解析检查点、生成海拔数据并写回 `races` |
+| `cloudfunctions/syncGpxToDb/package.json` | 云函数依赖定义，依赖 `wx-server-sdk ~3.0.4` |
+| `cloudfunctions/syncGpxToDb/config.json` | 云函数权限配置，无额外 openapi 权限 |
+
+#### `index.js` 核心逻辑
+
+1. 下载 GPX 文件。
+2. 解析所有 `trkpt`，累计：
+   - `totalDistM`
+   - `totalGain`
+   - `totalLoss`
+3. 解析所有 `wpt`，识别有效 CP/DP。
+4. 用滑窗匹配 CP 对应的轨迹索引。
+5. 为每个赛段生成：
+   - `rawPoints`
+   - `svgProfile`
+6. 从点名尾部提取关门时间：
+   - 例如 `CP3-16:00`
+7. 生成每个检查点的：
+   - `accDist`
+   - `accGain`
+   - `accLoss`
+   - `segDist`
+   - `segGain`
+   - `segLoss`
+   - `rest`
+   - `isDropBag`
+   - `cutoffTime`
+8. 最后把结果写回：
+   - `groups.{groupIndex}.checkpoints`
+   - `groups.{groupIndex}.actualDist`
+   - `groups.{groupIndex}.elevation`
+
+当前调用入口：
+
+- `pages/admin-race-add/admin-race-add.js` 的 `submitAndIgnite()`
+
+## 8. 静态资源与空目录说明
+
+### 8.1 `images/`
+
+| 文件 | 使用位置 | 作用 |
+| --- | --- | --- |
+| `images/watch1.png` | `pages/index/index.wxml` | 首页底部导航中“我的产品”图标，当前激活态 |
+| `images/people1.png` | `pages/index/index.wxml` | 首页底部导航中“个人中心”图标，未激活态 |
+| `images/watch.png` | `pages/profile/profile.wxml` | 个人中心底部导航中“我的产品”图标，未激活态 |
+| `images/people.png` | `pages/profile/profile.wxml` | 个人中心底部导航中“个人中心”图标，当前激活态 |
+| `images/qrcode.png` | `pages/plan-result/plan-result.js` | 导出长图海报底部二维码 |
+
+### 8.2 `utils/`
+
+当前为空目录，说明作者预留了工具函数目录，但暂时没有把通用方法拆出来。
+
+## 9. 当前 BLE 设计说明
+
+当前 BLE 不是原生蓝牙实现，而是“页面逻辑 + 载荷结构 + 模拟动画”三部分：
+
+- 设备发现和连接：
+  - `pages/ble-connect/ble-connect.js`
+  - 使用写死设备列表和 `setTimeout`
+- 是否连接：
+  - 存在 `app.globalData.isConnected`
+- 手表名称：
+  - 存在 `app.globalData.deviceName`
+- 真正发送前的数据准备：
+  - `pages/plan-result/plan-result.js`
+  - `buildBlePlanPayload()`
+- 额外文档：
+  - `BLE_PAYLOAD_DEV_GUIDE.md`
+
+当前 BLE 侧已经完成的是：
+
+- 手表所需数据结构定义
+- 到达时间/关门时间转换成北京时间字符串
+- 载荷格式校验
+- 模拟上传和传输提示
+
+当前 BLE 侧还没有完成的是：
+
+- `wx.openBluetoothAdapter`
+- `wx.createBLEConnection`
+- 特征值读写
+- 分包、重试、ACK
+
+## 10. GPX 命名和解析约定
+
+当前 GPX 解析对命名有明显约定，维护时必须知道：
+
+- 起点：`START` 或含“起点”
+- 终点：`FINISH` 或含“终点”
+- 检查点：`CP1`、`CP2`、`CP3`
+- 换装点：`DP1`、`DP2` 或含“换装”
+- 点名尾部可附带关门时间：`CP3-16:00`
+
+示例：
 
 ```text
 START
@@ -233,264 +817,41 @@ CP3-16:00
 FINISH
 ```
 
-如果 GPX 中没有有效的 WPT 或命名不规范，计划页可能无法生成可用的 CP 数据。
+如果 GPX 的 `<wpt>` 命名不符合这个规则，云函数很可能无法正确生成 `checkpoints`。
 
-## 数据模型
+## 11. 当前实现中的关键注意点
 
-### 1. `races`
+这些不是文件缺失，而是当前代码行为上必须知道的事实：
 
-赛事主表。
+- 首页和“我的计划”都直接读取整个 `user_plans` 集合，没有按用户做隔离。
+- 登录状态只存在前端 `app.globalData` 中，关闭小程序后不会持久化。
+- `profile` 页虽然维护了 `isAdmin`，但控制台入口在模板里始终显示。
+- 大部分数据库写操作发生在前端页面中，而不是云函数中。
+- `plan-result.js` 是最核心的业务文件，后续任何计划算法、BLE 接入、导出逻辑都要从这里继续维护。
 
-示例结构：
+## 12. 接手时建议优先看哪些文件
 
-```json
-{
-  "_id": "race_doc_id",
-  "name": "2026 某某越野赛",
-  "location": "浙江 湖州",
-  "date": "2026-10-01",
-  "hasItra": true,
-  "coverImg": "cloud://.../race-covers/xxx.png",
-  "tags": [
-    { "dist": "50km", "color": "#36E153" },
-    { "dist": "100km", "color": "#FF9811" }
-  ],
-  "groups": [
-    {
-      "dist": "50km",
-      "cutoffTime": "14小时",
-      "themeColor": "#36E153",
-      "startTime": "07:00",
-      "startTime2": "07:30",
-      "detailMapImg": "cloud://.../race-maps/xxx.png",
-      "gpxFileID": "cloud://.../gpx-tracks/xxx.gpx",
-      "actualDist": "52.4km",
-      "elevation": "3120m+ / 2980m-",
-      "checkpoints": []
-    }
-  ],
-  "createTime": "serverDate",
-  "updateTime": "serverDate"
-}
-```
+如果要快速理解项目，建议按这个顺序阅读：
 
-`groups[].checkpoints` 中常见字段：
+1. `app.js`
+2. `app.json`
+3. `pages/admin-race-add/admin-race-add.js`
+4. `cloudfunctions/syncGpxToDb/index.js`
+5. `pages/race-detail/race-detail.js`
+6. `pages/plan-result/plan-result.js`
+7. `pages/index/index.js`
+8. `pages/my-plans/my-plans.js`
+9. `pages/login/login.js`
+10. `BLE_PAYLOAD_DEV_GUIDE.md`
 
-- `name`: CP 名称
-- `accDist`: 累计距离（km）
-- `accGain`: 累计爬升（m）
-- `accLoss`: 累计下降（m）
-- `segDist`: 分段距离（km）
-- `segGain`: 分段爬升（m）
-- `segLoss`: 分段下降（m）
-- `tempEle`: 点位海拔
-- `rawPoints`: 分段海拔原始点
-- `svgProfile`: 分段海拔 SVG
-- `cutoffTime`: 关门时间
-- `isDropBag`: 是否换装点
+## 13. 一句话总结
 
-### 2. `user_plans`
+这个仓库的本质是一个“越野赛事数据后台 + 计划计算器 + 模拟手表同步”的微信小程序原型。其中：
 
-用户保存的赛事计划。
+- `races` 决定赛事事实数据，
+- `syncGpxToDb` 决定赛道 CP 数据质量，
+- `plan-result.js` 决定用户最终看到的配速计划，
+- `user_plans` 承担计划持久化，
+- `users` 只提供了最基础、最原型级的登录能力。
 
-示例结构：
-
-```json
-{
-  "_id": "plan_doc_id",
-  "raceId": "race_doc_id",
-  "raceName": "2026 某某越野赛 - 50km",
-  "groupDist": "50km",
-  "raceDate": "2026-10-01",
-  "raceDateMs": 1790784000000,
-  "startTime": "07:00",
-  "targetHours": 10,
-  "targetMinutes": 30,
-  "checkpoints": [],
-  "createTime": "serverDate",
-  "updateTime": "serverDate"
-}
-```
-
-当前保存逻辑会按照 `raceId + groupDist` 查重，命中后更新，未命中则新增。
-
-### 3. `users`
-
-用户账号表。
-
-示例结构：
-
-```json
-{
-  "_id": "user_doc_id",
-  "username": "demo",
-  "password": "123456",
-  "role": "user",
-  "createdAt": "serverDate"
-}
-```
-
-`role` 可用于区分普通用户和管理员，但当前前端入口控制仍不严。
-
-## 计划生成逻辑
-
-计划页的核心思路不是简单均速，而是基于“等效距离 + 疲劳指数”分配每段用时。
-
-关键逻辑：
-
-1. 每段等效距离 `segED = segDist + segGain / 100`
-2. 累计等效距离 `totalED = sum(segED)`
-3. 目标总时间减去休息时间，得到总移动时间 `movingMins`
-4. 使用疲劳指数 `K = 1.07` 分配每段移动时间
-5. 再叠加发枪时间和每站休息时间，得到到达/离开时间
-6. 如果 CP 配有 `cutoffTime`，则与推导到达时间比较，判断是否超时
-
-这套算法适合作为越野赛事的配速草案，但不是医学或训练学意义上的严格模型。
-
-## 运行环境与启动方式
-
-### 前置条件
-
-- 安装微信开发者工具
-- 小程序基础库版本支持云开发
-- 已开通微信云开发环境
-
-当前仓库内可见的配置：
-
-- 小程序 AppID：`wx4bb1c2c6c6358eda`
-- 云环境 ID：`cloud1-8g7flmwwa4402751`
-- 云函数根目录：`cloudfunctions/`
-
-### 启动步骤
-
-1. 使用微信开发者工具打开项目根目录
-2. 检查并按需修改 `app.js` 中的云环境 ID
-3. 检查并按需修改 `project.config.json` 中的 `appid`
-4. 进入两个云函数目录安装依赖
-5. 在开发者工具中上传并部署云函数
-6. 创建数据库集合并配置权限
-7. 导入测试数据后运行小程序
-
-### 云函数依赖安装
-
-在项目根目录执行：
-
-```powershell
-cd cloudfunctions\parseGpx
-npm install
-cd ..\syncGpxToDb
-npm install
-```
-
-或者直接在微信开发者工具中对每个云函数执行“上传并部署：云端安装依赖”。
-
-### 云函数部署
-
-需要部署的函数：
-
-- `parseGpx`
-- `syncGpxToDb`
-
-如果只保留主业务流程，至少要保证 `syncGpxToDb` 已部署成功。
-
-## 数据库准备
-
-至少需要创建以下集合：
-
-- `races`
-- `user_plans`
-- `users`
-
-推荐权限思路：
-
-- `races`
-  当前代码由前端直接增删改查。开发期可以放宽，生产期建议改成只允许管理员经云函数写入。
-- `user_plans`
-  建议只允许记录创建者读写自己的计划。
-- `users`
-  当前是前端直查明文密码，不建议开放真实生产权限。
-
-## 推荐联调顺序
-
-1. 先部署云函数
-2. 在 `users` 插入一个测试管理员账号
-3. 进入管理后台创建一条赛事
-4. 为某个组别上传 GPX，等待 `syncGpxToDb` 回填
-5. 回到用户侧查看赛事详情
-6. 输入目标时间生成计划
-7. 保存计划到 `user_plans`
-8. 在“我的计划”确认数据是否正常
-
-## 当前实现中的已知限制
-
-### 1. 蓝牙连接是模拟实现
-
-`pages/ble-connect` 当前没有调用真实 BLE API，设备列表和连接成功状态都是本地模拟。
-
-### 2. 登录方案不安全
-
-当前登录/注册直接在前端查询 `users` 集合，并使用明文密码存储。这个方案只能用于原型验证，正式环境必须改成：
-
-- 云函数登录
-- 服务端校验
-- 密码加密存储
-- 更严格的角色鉴权
-
-### 3. 管理入口当前不是严格受控
-
-个人中心页面中，管理后台入口当前直接展示。即使有 `isAdmin` 状态，页面层面也没有真正做完备权限隔离。
-
-### 4. 云环境是硬编码的
-
-`app.js` 中直接写死了云环境 ID。切换到新的云环境时必须手动修改。
-
-### 5. 管理写操作目前走前端直连数据库
-
-赛事新增、编辑、删除都在前端页面直接执行数据库写入。原型阶段可以接受，但生产环境应迁移到云函数，避免越权风险。
-
-## 后续可优先改造的方向
-
-- 用真实 BLE 通信替换当前模拟连接页
-- 将用户登录迁移到云函数并加密密码
-- 将赛事管理写操作迁移到云函数
-- 增加管理员鉴权与页面拦截
-- 增加 GPX 导入失败的前端状态反馈
-- 为 `README` 中的数据结构补充样例数据脚本
-- 增加自动化测试和数据校验
-
-## 常见问题
-
-### 1. 为什么赛事详情页生成不了计划？
-
-通常是当前组别没有 `checkpoints`。请确认：
-
-- 已上传 GPX
-- `syncGpxToDb` 已正确部署
-- 云函数执行后已把 `groups[].checkpoints` 回写到 `races`
-
-### 2. 为什么首页没有显示赛事？
-
-首页只展示当天及未来赛事。如果赛事日期早于今天，会被过滤掉。
-
-### 3. 为什么“我的计划”里看不到数据？
-
-请确认：
-
-- 计划是否已成功写入 `user_plans`
-- 当前集合权限是否允许当前用户读取自己的数据
-- `raceDateMs` 是否正确写入
-
-### 4. 为什么导出图片失败？
-
-计划长图保存依赖相册权限。请在微信中允许“保存到相册”。
-
-## 当前仓库状态说明
-
-截至当前代码：
-
-- 没有自动化测试配置
-- 没有 CI/CD 配置
-- 没有顶层 npm 依赖
-- 主要业务依赖微信开发者工具和云开发环境
-
-如果后续继续迭代，建议优先补齐权限边界和云函数化写操作，再考虑 UI 和设备协议接入。
+后续无论是接真实 BLE、改权限、做用户隔离，还是继续优化算法，核心都绕不开这几处。

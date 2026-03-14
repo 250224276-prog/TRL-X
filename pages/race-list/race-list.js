@@ -1,3 +1,4 @@
+// 页面：全部比赛，显示赛事搜索、筛选和分组列表
 const db = wx.cloud.database();
 
 Page({

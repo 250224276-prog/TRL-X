@@ -1,3 +1,4 @@
+// 页面：比赛详情，显示组别信息并提供生成计划入口
 // pages/race-detail/race-detail.js
 // 获取全局云端数据库引用
 const db = wx.cloud.database();
