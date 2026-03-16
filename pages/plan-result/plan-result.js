@@ -1,6 +1,8 @@
 const app = getApp();
 // 获取云数据库
 const db = wx.cloud.database();
+// BLE 工具模块
+const { writeBLECharacteristicValue, findWritableCharacteristic } = require('../../utils/ble');
 
 Page({
   data: {
@@ -1140,6 +1142,82 @@ Page({
     wx.reLaunch({ url: '/pages/index/index' });
   },
 
+  /**
+   * 将字符串转换为 UTF-8 ArrayBuffer
+   * 兼容微信小程序环境
+   */
+  stringToUtf8ArrayBuffer(str) {
+    let bytes = [];
+    
+    for (let i = 0; i < str.length; i++) {
+      let code = str.charCodeAt(i);
+      
+      if (code <= 0x7F) {
+        bytes.push(code);
+      } else if (code <= 0x7FF) {
+        bytes.push(0xC0 | (code >> 6));
+        bytes.push(0x80 | (code & 0x3F));
+      } else if (code <= 0xFFFF) {
+        bytes.push(0xE0 | (code >> 12));
+        bytes.push(0x80 | ((code >> 6) & 0x3F));
+        bytes.push(0x80 | (code & 0x3F));
+      }
+    }
+    
+    // 创建正确长度的 ArrayBuffer
+    let buffer = new ArrayBuffer(bytes.length);
+    let view = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.length; i++) {
+      view[i] = bytes[i];
+    }
+    
+    return buffer;
+  },
+
+  /**
+   * 分块发送 BLE 数据
+   */
+  async sendBleDataInChunks(deviceId, data) {
+    const CHUNK_SIZE = 230; // BLE 单次写入最大字节数
+    const END_MARKER = [0xFF, 0xFF, 0xFF];
+    
+    // 查找可写入特征值
+    const writeChar = await findWritableCharacteristic(deviceId);
+    console.log('[BLE Send] 找到可写入特征值:', writeChar);
+    
+    // 生成带结束符的载荷
+    const totalBytes = data.byteLength + END_MARKER.length;
+    const payload = new Uint8Array(totalBytes);
+    payload.set(new Uint8Array(data), 0);
+    payload.set(END_MARKER, payload.length - END_MARKER.length);
+    
+    // 分块
+    const chunks = [];
+    const view = new Uint8Array(payload.buffer);
+    for (let i = 0; i < view.length; i += CHUNK_SIZE) {
+      chunks.push(view.slice(i, i + CHUNK_SIZE).buffer);
+    }
+    
+    const totalChunks = chunks.length;
+    console.log('[BLE Send] 总数据大小:', totalBytes, '字节');
+    console.log('[BLE Send] 分块数:', totalChunks);
+    
+    // 逐包发送
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      console.log('[BLE Send] 发送第', i + 1, '包，大小:', chunk.byteLength, '字节');
+      
+      await writeBLECharacteristicValue(deviceId, writeChar.serviceId, writeChar.uuid, chunk);
+      
+      // 包间延迟
+      if (i < chunks.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+    }
+    
+    console.log('[BLE Send] 数据发送完成');
+  },
+
   async executeSyncAnimation() {
     let payloadForBleLog = null;
     const success = await this.uploadPlanToCloud();
@@ -1148,17 +1226,36 @@ Page({
     console.log('[BLE Send] payload object =', payloadForBleLog);
     console.log('[BLE Send] payload json =', JSON.stringify(payloadForBleLog));
 
+    // 检查 BLE 连接状态
+    const { isConnected, connectedDeviceId, writeCharacteristic } = app.globalData;
+    if (!isConnected || !connectedDeviceId || !writeCharacteristic) {
+      wx.showToast({ title: '设备未连接', icon: 'none' });
+      return;
+    }
+
     wx.showLoading({ title: '正在打包路书...', mask: true });
     
-    setTimeout(() => {
+    try {
+      // 转换数据为 ArrayBuffer
+      const jsonString = JSON.stringify(payloadForBleLog);
+      const data = this.stringToUtf8ArrayBuffer(jsonString);
+      
       wx.showLoading({ title: '蓝牙传输中...', mask: true });
       
-      setTimeout(() => {
-        wx.hideLoading();
-        this.setupSuccessModal('同步手表成功');
-      }, 1500); 
+      // 分块发送数据
+      await this.sendBleDataInChunks(
+        connectedDeviceId,
+        data
+      );
       
-    }, 1000); 
+      wx.hideLoading();
+      this.setupSuccessModal('同步手表成功');
+      console.log('[BLE Send] 数据发送成功');
+    } catch (error) {
+      wx.hideLoading();
+      wx.showToast({ title: '发送失败', icon: 'none' });
+      console.error('[BLE Send] 发送失败:', error);
+    }
   },
 
   setupSuccessModal(titleText) {
