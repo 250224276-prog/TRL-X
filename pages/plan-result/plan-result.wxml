@@ -1,84 +1,118 @@
 <view class="plan-page">
-  <view class="sticky-header">
+  <view class="top-nav">
     <view class="back-btn" bindtap="goBack"><view class="arrow-left"></view></view>
-    <view class="race-name">{{raceName}}</view>
-
-    <view class="config-grid">
-      <view class="config-item">
-        <text class="config-label">计划用时</text>
-        <picker class="config-picker" mode="multiSelector" range="{{timeRange}}" value="{{timeIndex}}" bindchange="onTimeChange">
-          <view class="config-capsule"><text>{{targetHours}}h {{targetMinutes}}m</text></view>
-        </picker>
-      </view>
-      <view class="config-item">
-        <text class="config-label">发枪时间</text>
-        <picker class="config-picker" mode="selector" range="{{availableStartTimes}}" disabled="{{availableStartTimes.length <= 1}}" bindchange="onStartChange">
-          <view class="config-capsule" style="{{availableStartTimes.length <= 1 ? 'opacity: 0.7;' : ''}}"><text>{{startTime}}</text></view>
-        </picker>
-      </view>
-      <view class="config-item">
-        <text class="config-label">平均休息</text>
-        <picker class="config-picker" mode="selector" range="{{restRange}}" value="{{restIndex}}" bindchange="onRestChange">
-          <view class="config-capsule"><text>{{globalRestMins}}m</text></view>
-        </picker>
-      </view>
-      
-      <view class="config-item">
-        <text class="config-label">补给提示</text>
-        <picker class="config-picker" mode="selector" range="{{nutritionRange}}" value="{{nutritionIndex}}" bindchange="onNutritionChange">
-          <view class="config-capsule"><text>{{nutritionVal}}</text></view>
-        </picker>
-      </view>
-    </view>
   </view>
 
   <scroll-view class="plan-scroll" scroll-y>
-    <view class="cp-row" wx:for="{{checkpoints}}" wx:key="index">
-      <view class="click-mask" bindtap="goToSegmentDetail" data-index="{{index}}"></view>
-      
-      <view class="cp-name-box">
-        <text class="cp-name">{{item.cpNum}}</text>
-        <text class="dp-tag" wx:if="{{item.isDropBag}}">换装点</text>
+    
+    <view class="scroll-top-section">
+      <view class="title-group">
+        <view class="race-name">{{pureRaceName || raceName}}</view>
+        <view class="plan-group-tag" wx:if="{{groupDist}}" style="color: {{groupColor}}; border-color: {{groupColor}};">{{groupDist}}</view>
       </view>
-
-      <view class="ctrl-group pos-move" wx:if="{{index > 0}}" catchtap="return">
-        <text class="ctrl-label">计划用时(m)</text>
-        <view class="ctrl-box">
-          <input class="{{item.isOvertime ? 'text-red' : 'text-orange'}}" type="number" value="{{item.moveMins}}" data-index="{{index}}" data-type="move" bindblur="onManualUpdate" />
-        </view>
-      </view>
-
-      <view class="ctrl-group pos-rest" wx:if="{{index > 0 && index < checkpoints.length - 1}}" catchtap="return">
-        <text class="ctrl-label">休息(m)</text>
-        <view class="ctrl-box">
-          <input class="text-blue" type="number" value="{{item.rest}}" data-index="{{index}}" data-type="rest" bindblur="onManualUpdate" />
-        </view>
-      </view>
-
-      <view class="elevation-box" wx:if="{{index > 0 && item.svgProfile}}">
-        <view class="elevation-svg" style="background-image: url('{{item.svgProfile}}');"></view>
-      </view>
-      
-      <view class="stats" wx:if="{{index > 0}}">
-        <view class="dist-val">{{item.segDist}}KM</view>
-        <view class="gain-loss">
-          <text class="val-up">+{{item.segGain}}</text>
-          <text class="val-down">-{{item.segLoss}}</text>
-        </view>
-      </view>
-      <view class="row-divider"></view>
     </view>
 
-    <view class="bottom-action-bar">
-      <view class="btn btn-save" bindtap="savePlanImage">保存图片</view>
-      <view class="btn btn-sync" bindtap="syncToHardware">同步至手表</view>
-    </view>
-    <view style="height: 80rpx;"></view> 
+    <view class="sticky-and-list-wrapper">
+      
+      <view class="sticky-wrapper">
+        <view class="config-grid-wrapper">
+          <view class="config-grid">
+            <view class="config-item">
+              <text class="config-label">计划用时</text>
+              <picker class="config-picker" mode="multiSelector" range="{{timeRange}}" value="{{timeIndex}}" bindchange="onTimeChange">
+                <view class="config-capsule"><text>{{targetHours}}h {{targetMinutes}}m</text></view>
+              </picker>
+            </view>
+            <view class="config-item">
+              <text class="config-label">发枪时间</text>
+              <picker class="config-picker" mode="selector" range="{{availableStartTimes}}" disabled="{{availableStartTimes.length <= 1}}" bindchange="onStartChange">
+                <view class="config-capsule" style="{{availableStartTimes.length <= 1 ? 'opacity: 0.7;' : ''}}"><text>{{startTime}}</text></view>
+              </picker>
+            </view>
+            <view class="config-item">
+              <text class="config-label">平均休息</text>
+              <picker class="config-picker" mode="selector" range="{{restRange}}" value="{{restIndex}}" bindchange="onRestChange">
+                <view class="config-capsule"><text>{{globalRestMins}}m</text></view>
+              </picker>
+            </view>
+            <view class="config-item">
+              <text class="config-label">补给提示</text>
+              <picker class="config-picker" mode="selector" range="{{nutritionRange}}" value="{{nutritionIndex}}" bindchange="onNutritionChange">
+                <view class="config-capsule"><text>{{nutritionVal}}</text></view>
+              </picker>
+            </view>
+          </view>
+        </view>
+
+        <view class="list-header-container">
+          <view class="list-row-inner">
+            <view class="col-1"><text class="lh-text">地点</text></view>
+            <view class="col-2">
+              <text class="lh-main">计划用时(m)</text>
+              <text class="lh-sub">(平均等强)</text>
+            </view>
+            <view class="col-3">
+              <text class="lh-main">休息(m)</text>
+              <text class="lh-sub">(到达时间)</text>
+            </view>
+            <view class="col-4"><text class="lh-text">海拔图</text></view>
+            <view class="col-5"><text class="lh-text">赛道信息</text></view>
+          </view>
+        </view>
+      </view>
+
+      <view class="list-content">
+        <view class="cp-row list-row-inner" wx:for="{{checkpoints}}" wx:key="index" wx:if="{{index > 0}}" bindtap="goToSegmentDetail" data-index="{{index}}">
+          
+          <view class="col-1">
+            <text class="cp-name">{{item.cpNum}}</text>
+            <text class="dp-tag" wx:if="{{item.isDropBag}}">换装点</text>
+            <text class="cutoff-text" wx:if="{{item.displayCutoffTime && item.displayCutoffTime !== '--:--'}}">{{item.displayCutoffTime}}关门</text>
+          </view>
+
+          <view class="col-2" catchtap="preventTouchMove">
+            <view class="ctrl-box">
+              <input class="{{item.isOvertime ? 'text-red' : 'text-orange'}}" type="number" value="{{item.moveMins}}" data-index="{{index}}" data-type="move" bindblur="onManualUpdate" />
+            </view>
+            <text class="sub-label">({{item.eqPaceShort}})</text>
+          </view>
+
+          <view class="col-3" catchtap="preventTouchMove">
+            <view class="ctrl-box" wx:if="{{index < checkpoints.length - 1}}">
+              <input class="text-blue" type="number" value="{{item.rest}}" data-index="{{index}}" data-type="rest" bindblur="onManualUpdate" />
+            </view>
+            <view class="ctrl-box" wx:else style="visibility: hidden;"></view>
+            <text class="sub-label {{item.isOvertime ? 'text-red' : ''}}">({{item.arrTime}})</text>
+          </view>
+
+          <view class="col-4">
+            <view class="elevation-svg" wx:if="{{item.svgProfile}}" style="background-image: url('{{item.svgProfile}}');"></view>
+          </view>
+          
+          <view class="col-5 stats">
+            <view class="dist-val">{{item.segDist}}KM</view>
+            <view class="gain-loss">
+              <text class="val-up">+{{item.segGain}}</text>
+              <text class="val-down">-{{item.segLoss}}</text>
+            </view>
+          </view>
+
+          <view class="row-divider"></view>
+        </view>
+
+        <view class="bottom-action-bar">
+          <view class="btn btn-save" bindtap="savePlanImage">保存图片</view>
+          <view class="btn btn-sync" bindtap="syncToHardware">同步至手表</view>
+        </view>
+        <view style="height: 80rpx;"></view> 
+      </view>
+
+    </view> 
   </scroll-view>
 
   <view class="modal-mask" wx:if="{{showDetail}}" bindtap="closeDetail" catchtouchmove="preventTouchMove"></view>
+  
   <view class="detail-sheet {{showDetail ? 'show' : ''}}">
-    
     <view class="ds-drag-area" bindtouchstart="onTouchStart" bindtouchend="onTouchEnd" data-type="dragArea" catchtouchmove="preventTouchMove">
       <view class="pull-handle"></view>
       <view class="ds-top-bar">
@@ -95,12 +129,10 @@
     <swiper class="detail-swiper" current="{{detailCurrent}}" bindchange="onDetailSwiperChange">
       <swiper-item wx:for="{{checkpoints}}" wx:key="index" wx:if="{{index > 0}}">
         <scroll-view class="ds-scroll" scroll-y bindscroll="onScroll" bindtouchstart="onTouchStart" bindtouchend="onTouchEnd" data-type="scrollView">
-          
           <view class="ds-title-row">
             <text class="ds-cp-main">{{item.cpNum}}</text>
             <text class="ds-cp-sub" wx:if="{{item.locName}}">{{item.locName}}</text>
           </view>
-
           <view class="ds-title-divider"></view>
 
           <view class="ds-stats-header">
@@ -117,9 +149,7 @@
 
           <view class="ds-chart-area">
             <canvas type="2d" id="elevChart_{{index}}" class="elev-canvas"
-                    catchtouchstart="onChartTouch" 
-                    catchtouchmove="onChartTouch" 
-                    catchtouchend="onChartTouchEnd"></canvas>
+                    catchtouchstart="onChartTouch" catchtouchmove="onChartTouch" catchtouchend="onChartTouchEnd"></canvas>
             <view class="chart-loading" wx:if="{{!chartReady[index]}}">正在渲染地形雷达...</view>
           </view>
 
@@ -135,7 +165,6 @@
                 <text class="ds-cell-val">{{item.eqDist}}KM</text>
               </view>
             </view>
-
             <view class="ds-grid-row">
               <view class="ds-grid-cell">
                 <text class="ds-cell-lbl">平均配速</text>
@@ -147,7 +176,6 @@
                 <text class="ds-cell-val">{{item.eqPace}}</text>
               </view>
             </view>
-
             <view class="ds-grid-row">
               <view class="ds-grid-cell">
                 <text class="ds-cell-lbl">计划到达</text>
@@ -179,14 +207,12 @@
           </view>
 
           <view class="ds-divider"></view>
-
           <view class="ds-memo-wrapper">
             <text class="ds-input-lbl" style="text-align: left;">休息备忘录</text>
             <view class="ds-memo-box">
               <textarea value="{{item.memo}}" data-index="{{index}}" bindinput="onMemoInput" placeholder="点击添加备忘 (例如: 吃盐丸、换袜子)..." placeholder-class="ph-color" cursor-spacing="40" />
             </view>
           </view>
-
           <view style="height: 120rpx;"></view>
         </scroll-view>
       </swiper-item>
@@ -195,8 +221,8 @@
 
   <canvas type="2d" id="shareCanvas" class="share-canvas"></canvas>
 
-  <view class="custom-modal-mask" wx:if="{{showConnectModal || showSuccessModal}}" catchtouchmove="preventTouchMove"></view>
-
+  <view class="custom-modal-mask" wx:if="{{showConnectModal || showSuccessModal || showUnsavedModal}}" catchtouchmove="preventTouchMove"></view>
+  
   <view class="trl-modal-box {{showConnectModal ? 'show' : ''}}" catchtouchmove="preventTouchMove">
     <text class="trl-modal-title">设备未连接</text>
     <text class="trl-modal-content">当前未连接手表。\n您可以去连接设备，或者仅将计划上传至云端库。</text>
@@ -211,6 +237,15 @@
     <text class="trl-modal-content">{{successModalTitle}}\n路书数据已就绪，祝您安全完赛！🚀</text>
     <view class="trl-modal-btns">
       <view class="trl-btn-primary full-width" bindtap="modalBackToHome">返回主页</view>
+    </view>
+  </view>
+
+  <view class="trl-modal-box {{showUnsavedModal ? 'show' : ''}}" catchtouchmove="preventTouchMove">
+    <text class="trl-modal-title">未保存提示</text>
+    <text class="trl-modal-content">当前专属计划尚未保存，退出将丢失本次修改内容。\n是否立即保存并同步？</text>
+    <view class="trl-modal-btns">
+      <view class="trl-btn-secondary" bindtap="modalDiscardAndExit">直接退出</view>
+      <view class="trl-btn-primary" bindtap="modalSaveAndSync">保存并同步</view>
     </view>
   </view>
 

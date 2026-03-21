@@ -7,6 +7,17 @@
     <text class="nav-title">全部比赛</text>
   </view>
 
+  <view class="tab-header">
+    <view class="tab-item {{timeTab === 'future' ? 'active' : ''}}" bindtap="switchTimeTab" data-tab="future">
+      <text>即将开赛</text>
+      <view class="tab-line" wx:if="{{timeTab === 'future'}}"></view>
+    </view>
+    <view class="tab-item {{timeTab === 'past' ? 'active' : ''}}" bindtap="switchTimeTab" data-tab="past">
+      <text>历史赛事</text>
+      <view class="tab-line" wx:if="{{timeTab === 'past'}}"></view>
+    </view>
+  </view>
+
   <view class="control-bar">
     <view class="search-box">
       <icon type="search" size="16" color="rgba(255,255,255,0.4)"/>

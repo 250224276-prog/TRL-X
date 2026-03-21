@@ -52,8 +52,8 @@
 
         <view class="input-row">
           <view class="input-group half">
-            <text class="label">简称 (如: 50km)</text>
-            <input class="input-field" placeholder="用于标签" value="{{item.dist}}" bindinput="onGroupInput" data-index="{{index}}" data-field="dist" />
+            <text class="label">简称(如: 50km，触发自动识色)</text>
+            <input class="input-field" placeholder="输入距离" value="{{item.dist}}" bindinput="onGroupInput" data-index="{{index}}" data-field="dist" />
           </view>
           <view class="input-group half">
             <text class="label">关门时间</text>
@@ -63,29 +63,32 @@
 
         <view class="input-row">
           <view class="input-group half">
-            <text class="label">第一发枪时间</text>
-            <picker mode="time" value="{{item.startTime1}}" bindchange="onGroupInput" data-index="{{index}}" data-field="startTime1">
-              <view class="picker-field active">{{item.startTime1}}</view>
-            </picker>
-          </view>
-          <view class="input-group half">
-            <text class="label">第二发枪(选填)</text>
-            <picker mode="time" value="{{item.startTime2}}" bindchange="onGroupInput" data-index="{{index}}" data-field="startTime2">
-              <view class="picker-field {{item.startTime2 ? 'active' : ''}}">{{item.startTime2 || '无'}}</view>
-            </picker>
-          </view>
-        </view>
-
-        <view class="input-row">
-          <view class="input-group half">
-            <text class="label">主题色系</text>
-            <picker mode="selector" range="{{colorNames}}" value="{{item.themeColorIndex}}" bindchange="onGroupInput" data-index="{{index}}" data-field="themeColorIndex">
-              <view class="picker-field active" style="color:{{colorList[item.themeColorIndex]}}">{{colorNames[item.themeColorIndex]}}</view>
-            </picker>
+            <text class="label">自动品牌色识别</text>
+            <view class="color-preview-box" style="border-color: {{item.computedColor}}">
+              <view class="color-dot" style="background: {{item.computedColor}}"></view>
+              <text style="color: {{item.computedColor}}; font-weight: 600; font-size: 26rpx;">系统已绑定</text>
+            </view>
           </view>
           <view class="input-group half" bindtap="chooseGroupMap" data-index="{{index}}">
             <text class="label">组别路线图(选填)</text>
             <view class="upload-btn {{item.detailMapPath ? 'uploaded' : ''}}">{{item.detailMapPath ? '✅ 已选择' : '+ 上传地图'}}</view>
+          </view>
+        </view>
+
+        <view class="st-section">
+          <view class="st-header">
+            <text class="label">发枪时间 (支持多批次起跑)</text>
+            <view class="st-add-mini" bindtap="addStartTime" data-group-index="{{index}}">+ 加一批</view>
+          </view>
+          <view class="st-grid">
+            <block wx:for="{{item.startTimes}}" wx:for-item="st" wx:for-index="stIdx" wx:key="stIdx">
+              <view class="st-cell">
+                <picker mode="time" value="{{st}}" bindchange="onStartTimeChange" data-group-index="{{index}}" data-st-index="{{stIdx}}">
+                  <view class="picker-field active st-picker">{{st}}</view>
+                </picker>
+                <view class="st-del-btn" bindtap="removeStartTime" data-group-index="{{index}}" data-st-index="{{stIdx}}" wx:if="{{item.startTimes.length > 1}}">×</view>
+              </view>
+            </block>
           </view>
         </view>
 

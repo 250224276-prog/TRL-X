@@ -15,6 +15,9 @@ Page({
     groupDist: '',
 
     raceName: '加载中...',
+    pureRaceName: '加载中...', 
+    groupColor: '#FFFFFF',   
+
     startTime: '07:00',
     availableStartTimes: [], 
     
@@ -26,9 +29,8 @@ Page({
     restIndex: 4, 
     globalRestMins: 5,
 
-    // 补给提示配置
     nutritionRange: [],
-    nutritionIndex: 29, // 默认对应 30m
+    nutritionIndex: 29, 
     nutritionVal: '30m', 
 
     checkpoints: [],
@@ -43,7 +45,10 @@ Page({
 
     showConnectModal: false, 
     showSuccessModal: false, 
-    successModalTitle: ''    
+    successModalTitle: '',
+    
+    hasUnsavedChanges: false,
+    showUnsavedModal: false
   },
 
   onShow() {
@@ -55,11 +60,43 @@ Page({
     }
   },
 
+  setUnsavedChanges(isDirty) {
+    if (this.data.hasUnsavedChanges !== isDirty) {
+      this.setData({ hasUnsavedChanges: isDirty });
+      if (isDirty) {
+        if (wx.enableAlertBeforeUnload) {
+          wx.enableAlertBeforeUnload({ message: '当前专属计划尚未保存，直接退出将丢失修改。' });
+        }
+      } else {
+        if (wx.disableAlertBeforeUnload) {
+          wx.disableAlertBeforeUnload();
+        }
+      }
+    }
+  },
+
+  getGroupColor(distStr) {
+    if (!distStr) return '#36E153';
+    let numStr = distStr.replace(/[^\d.]/g, ''); 
+    let dist = parseFloat(numStr) || 0;
+    if (dist < 30) return '#36E153';       
+    if (dist < 60) return '#FF9811';       
+    if (dist < 100) return '#3284FF';      
+    return '#F94747';                      
+  },
+
   formatPace(min) {
     if (!min || min <= 0 || !isFinite(min)) return "-'--\"/km";
     const m = Math.floor(min);
     const s = Math.round((min - m) * 60);
     return `${m}'${s < 10 ? '0'+s : s}"/km`;
+  },
+
+  formatPaceShort(min) {
+    if (!min || min <= 0 || !isFinite(min)) return "-'--\"";
+    const m = Math.floor(min);
+    const s = Math.round((min - m) * 60);
+    return `${m}'${s < 10 ? '0'+s : s}"`;
   },
 
   goToSegmentDetail(e) {
@@ -203,7 +240,6 @@ Page({
       ctx.fillText(d, px, height - padding.bottom + 4);
     }
 
-    // 纯粹的渐变色绘制
     ctx.beginPath();
     ctx.moveTo(getX(points[0].d), getY(points[0].e));
     points.forEach(p => ctx.lineTo(getX(p.d), getY(p.e)));
@@ -222,7 +258,7 @@ Page({
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // 触控 Tooltip
+    // ✨ 交互胶囊：高级磨砂玻璃圆角版本
     if (touchX !== null && touchX >= 0 && touchX <= width) {
       let closestPoint = points[0];
       let minDiff = Infinity;
@@ -237,6 +273,7 @@ Page({
       let focusX = getX(closestPoint.d);
       let focusY = getY(closestPoint.e);
 
+      // 竖线指示器
       ctx.beginPath();
       ctx.moveTo(focusX, 0);
       ctx.lineTo(focusX, height - padding.bottom);
@@ -244,6 +281,7 @@ Page({
       ctx.lineWidth = 1;
       ctx.stroke();
 
+      // 指示器圆点
       ctx.beginPath();
       ctx.arc(focusX, focusY, 4, 0, 2 * Math.PI);
       ctx.fillStyle = '#FFFFFF';
@@ -252,17 +290,25 @@ Page({
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      const tipW = 74;
-      const tipH = 44; 
+      // 胶囊尺寸设定
+      const tipW = 86;
+      const tipH = 46; 
       let tipX = focusX - tipW / 2;
-      let tipY = focusY - tipH - 10;
+      let tipY = focusY - tipH - 12;
       
+      // 边界保护
       if (tipX < 2) tipX = 2;
       if (tipX + tipW > width - 2) tipX = width - tipW - 2;
       if (tipY < 2) tipY = focusY + 15;
 
-      ctx.fillStyle = 'rgba(20,20,20,0.95)';
-      const r = 6;
+      // ✨ 完美圆角：半径设为高度的一半
+      const r = tipH / 2; 
+
+      // 1. 绘制外部阴影（模拟玻璃悬浮的立体感）
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 4;
+
       ctx.beginPath();
       ctx.moveTo(tipX + r, tipY);
       ctx.lineTo(tipX + tipW - r, tipY);
@@ -273,22 +319,45 @@ Page({
       ctx.arcTo(tipX, tipY + tipH, tipX, tipY + tipH - r, r);
       ctx.lineTo(tipX, tipY + r);
       ctx.arcTo(tipX, tipY, tipX + r, tipY, r);
+      ctx.closePath();
+
+      // 2. 模拟暗色磨砂玻璃材质（高透黑灰色）
+      ctx.fillStyle = 'rgba(30, 30, 32, 0.85)';
       ctx.fill();
 
+      // 3. 关闭阴影，准备画边框和文字（防止文字自带阴影导致模糊）
+      ctx.shadowColor = 'transparent';
+
+      // 4. 绘制玻璃材质边缘的细微高光反光边框
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.stroke();
+
+      // 5. 绘制文字
       ctx.fillStyle = '#FFFFFF';
       ctx.font = 'bold 12px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(`${closestPoint.d}km`, tipX + tipW/2, tipY + 14);
+      ctx.fillText(`${closestPoint.d}km`, tipX + tipW/2, tipY + 15);
       
       ctx.fillStyle = '#FFAA16';
-      ctx.fillText(`${closestPoint.e}m`, tipX + tipW/2, tipY + 30);
+      ctx.fillText(`${closestPoint.e}m`, tipX + tipW/2, tipY + 31);
     }
   },
 
   onChartTouch(e) {
-    if (!e.touches || !e.touches.length) return;
-    let x = e.touches[0].x !== undefined ? e.touches[0].x : (e.touches[0].clientX - 20);
+    if (!e.touches || e.touches.length === 0) return;
+    let touch = e.touches[0];
+    let x = 0;
+    
+    if (touch.x !== undefined) {
+      x = touch.x; 
+    } else {
+      const sysInfo = wx.getSystemInfoSync();
+      const paddingLeftPx = 40 * (sysInfo.windowWidth / 750);
+      x = touch.clientX - paddingLeftPx;
+    }
+    
     this.drawChartBase(x);
   },
 
@@ -303,15 +372,13 @@ Page({
     const rests = [];
     for(let i=1; i<=30; i++) rests.push(i + 'm');
     
-    // 生成营养补给数组
     const nutritions = [];
     for(let i=1; i<=30; i++) nutritions.push(i + 'm');
-    nutritions.push('关闭'); // 此时 '关闭' 刚好在索引 30 的位置
+    nutritions.push('关闭'); 
     for(let i=31; i<=90; i++) nutritions.push(i + 'm');
 
     let h = parseInt(options.h);
     let m = parseInt(options.m);
-
     let finalH = isNaN(h) ? 21 : h;
     let finalM = isNaN(m) ? (isNaN(h) ? 43 : 0) : m; 
 
@@ -323,8 +390,8 @@ Page({
       restRange: rests, 
       restIndex: 4,
       nutritionRange: nutritions, 
-      nutritionVal: '30m',   // 默认初始值
-      nutritionIndex: 29     // '30m' 对应的初始下标
+      nutritionVal: '30m',   
+      nutritionIndex: 29     
     });
 
     const eventChannel = this.getOpenerEventChannel();
@@ -337,12 +404,20 @@ Page({
         if (data.targetHours !== undefined && data.targetHours !== null) finalH = parseInt(data.targetHours);
         if (data.targetMinutes !== undefined && data.targetMinutes !== null) finalM = parseInt(data.targetMinutes);
 
+        let pureName = data.name || '越野赛';
+        if (data.groupDist && pureName.includes(data.groupDist)) {
+          pureName = pureName.replace(` - ${data.groupDist}`, '').replace(data.groupDist, '').trim();
+        }
+        let groupColor = this.getGroupColor(data.groupDist);
+
         const availableTimes = data.availableStartTimes || [data.startTime || '07:00'];
         this.setData({ 
           raceId: data.raceId || '',
           raceDate: data.raceDate || '',
           groupDist: data.groupDist || '',
           raceName: data.name || '越野赛', 
+          pureRaceName: pureName,
+          groupColor: groupColor,
           startTime: data.startTime || '07:00',
           availableStartTimes: availableTimes,
           targetHours: finalH,
@@ -350,6 +425,7 @@ Page({
           timeIndex: [finalH, finalM]
         });
         this.initData(data.checkpoints);
+        this.setUnsavedChanges(true); 
       });
     }
 
@@ -366,11 +442,19 @@ Page({
             let dbNutritionIndex = nutritions.indexOf(dbNutritionVal);
             if (dbNutritionIndex === -1) dbNutritionIndex = 29;
 
+            let pureName = planData.raceName || '越野赛';
+            if (planData.groupDist && pureName.includes(planData.groupDist)) {
+              pureName = pureName.replace(` - ${planData.groupDist}`, '').replace(planData.groupDist, '').trim();
+            }
+            let groupColor = this.getGroupColor(planData.groupDist);
+
             this.setData({
               raceId: planData.raceId || '',
               raceDate: planData.raceDate || '',
               groupDist: planData.groupDist || '',
               raceName: planData.raceName || '越野赛',
+              pureRaceName: pureName,
+              groupColor: groupColor,
               startTime: planData.startTime || '07:00',
               availableStartTimes: planData.availableStartTimes || [planData.startTime || '07:00'],
               targetHours: planData.targetHours,
@@ -381,6 +465,7 @@ Page({
             });
             
             this.initData(planData.checkpoints);
+            this.setUnsavedChanges(false); 
           },
           fail: err => {
             wx.hideLoading();
@@ -395,20 +480,20 @@ Page({
   onNutritionChange(e) {
     const index = e.detail.value;
     const val = this.data.nutritionRange[index];
-    this.setData({ 
-      nutritionIndex: index, 
-      nutritionVal: val 
-    });
+    this.setData({ nutritionIndex: index, nutritionVal: val });
+    this.setUnsavedChanges(true); 
   },
 
   onTimeChange(e) {
     const val = e.detail.value;
     this.setData({ timeIndex: val, targetHours: val[0], targetMinutes: val[1] }, () => this.runFatigueEngine());
+    this.setUnsavedChanges(true); 
   },
   
   onStartChange(e) {
     const newStartTime = this.data.availableStartTimes[e.detail.value];
     this.setData({ startTime: newStartTime }, () => this.updateTimesAndPaces(false));
+    this.setUnsavedChanges(true); 
   },
   
   onRestChange(e) {
@@ -416,6 +501,24 @@ Page({
     let cps = this.data.checkpoints;
     cps.forEach((cp, i) => { if (i > 0 && i < cps.length - 1 && !cp.isDropBag) cp.rest = val; });
     this.setData({ globalRestMins: val, restIndex: e.detail.value, checkpoints: cps }, () => this.runFatigueEngine());
+    this.setUnsavedChanges(true); 
+  },
+
+  onManualUpdate(e) {
+    const { index, type } = e.currentTarget.dataset;
+    const val = parseInt(e.detail.value) || 0;
+    let { checkpoints } = this.data;
+    if (type === 'rest') checkpoints[index].rest = val;
+    else if (type === 'move') checkpoints[index].moveMins = val;
+    this.setData({ checkpoints }, () => this.updateTimesAndPaces(true));
+    this.setUnsavedChanges(true); 
+  },
+
+  onMemoInput(e) {
+    const index = e.currentTarget.dataset.index;
+    const val = e.detail.value;
+    this.setData({ [`checkpoints[${index}].memo`]: val });
+    this.setUnsavedChanges(true); 
   },
 
   initData(rawCps) {
@@ -435,7 +538,6 @@ Page({
       if (locName.includes('-')) {
         let parts = locName.split('-');
         cpNum = parts[0] || cpNum;
-        
         let lastPart = parts[parts.length - 1].trim();
         if (/^\d+$/.test(lastPart)) {
           segCutoffMins = parseInt(lastPart, 10);
@@ -516,29 +618,20 @@ Page({
   getRaceDateParts(dateStr = this.data.raceDate) {
     const nums = (dateStr || '').match(/\d+/g);
     if (!nums || nums.length < 3) return null;
-
     const year = Number(nums[0]);
     const month = Number(nums[1]);
     const day = Number(nums[2]);
-
-    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
-      return null;
-    }
-
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
     return { year, month, day };
   },
 
   formatBeijingDateTime(absoluteMinutes, raceDate = this.data.raceDate) {
     if (!Number.isFinite(absoluteMinutes)) return '';
-
     const parts = this.getRaceDateParts(raceDate);
     if (!parts) return '';
-
-    const utcMsAtBeijingMidnight =
-      Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0) - (8 * 60 * 60 * 1000);
+    const utcMsAtBeijingMidnight = Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0) - (8 * 60 * 60 * 1000);
     const utcMs = utcMsAtBeijingMidnight + (Math.round(absoluteMinutes) * 60 * 1000);
     const beijingDate = new Date(utcMs + (8 * 60 * 60 * 1000));
-
     const yyyy = beijingDate.getUTCFullYear();
     const mm = String(beijingDate.getUTCMonth() + 1).padStart(2, '0');
     const dd = String(beijingDate.getUTCDate()).padStart(2, '0');
@@ -551,26 +644,16 @@ Page({
     const cpNum = (cp.cpNum || `CP${index + 1}`).trim();
     const locName = (cp.locName || '').trim();
     const rawName = (cp.name || '').trim();
-
     if (cpNum && locName) return `${cpNum} - ${locName}`;
     if (rawName) return rawName;
     return cpNum;
   },
 
   getBleCutoffTimeBjt(cp, raceDate = this.data.raceDate) {
-    if (Number.isFinite(cp.absoluteCutoffMins)) {
-      return this.formatBeijingDateTime(cp.absoluteCutoffMins, raceDate);
-    }
-
-    if (!cp.cutoffTime || cp.cutoffTime === '--:--') {
-      return '';
-    }
-
+    if (Number.isFinite(cp.absoluteCutoffMins)) return this.formatBeijingDateTime(cp.absoluteCutoffMins, raceDate);
+    if (!cp.cutoffTime || cp.cutoffTime === '--:--') return '';
     const [h, m] = cp.cutoffTime.split(':').map(Number);
-    if (!Number.isFinite(h) || !Number.isFinite(m)) {
-      return '';
-    }
-
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return '';
     return this.formatBeijingDateTime((h * 60) + m, raceDate);
   },
 
@@ -587,20 +670,13 @@ Page({
       nutritionIndex: this.data.nutritionIndex, 
       checkpoints: (Array.isArray(checkpoints) ? checkpoints : []).map(cp => ({ ...cp }))
     };
-
     this.localPlanSnapshot = snapshot;
     return snapshot;
   },
 
   getBleSourcePlan(sourcePlan = null) {
-    if (sourcePlan && Array.isArray(sourcePlan.checkpoints)) {
-      return sourcePlan;
-    }
-
-    if (this.localPlanSnapshot && Array.isArray(this.localPlanSnapshot.checkpoints)) {
-      return this.localPlanSnapshot;
-    }
-
+    if (sourcePlan && Array.isArray(sourcePlan.checkpoints)) return sourcePlan;
+    if (this.localPlanSnapshot && Array.isArray(this.localPlanSnapshot.checkpoints)) return this.localPlanSnapshot;
     return this.saveLocalPlanSnapshot(this.data.checkpoints);
   },
 
@@ -624,116 +700,9 @@ Page({
       segmentCount: segments.length,
       segments
     };
-
     this.localPlanSnapshot = plan;
     this.blePlanPayload = payload;
     return payload;
-  },
-
-  isBleDateTimeString(value) {
-    if (typeof value !== 'string') return false;
-
-    const match = value.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/);
-    if (!match) return false;
-
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-    const day = Number(match[3]);
-    const hour = Number(match[4]);
-    const minute = Number(match[5]);
-
-    if (
-      !Number.isFinite(year) ||
-      !Number.isFinite(month) ||
-      !Number.isFinite(day) ||
-      !Number.isFinite(hour) ||
-      !Number.isFinite(minute)
-    ) {
-      return false;
-    }
-
-    if (month < 1 || month > 12 || day < 1 || day > 31 || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-      return false;
-    }
-
-    const date = new Date(Date.UTC(year, month - 1, day, hour, minute));
-    return (
-      date.getUTCFullYear() === year &&
-      (date.getUTCMonth() + 1) === month &&
-      date.getUTCDate() === day &&
-      date.getUTCHours() === hour &&
-      date.getUTCMinutes() === minute
-    );
-  },
-
-  validateBlePlanPayload(payload = this.blePlanPayload) {
-    const errors = [];
-
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-      return { valid: false, errors: ['payload 必须是一个对象'], payload };
-    }
-
-    if (payload.ver !== 2) errors.push('payload.ver 必须为 2');
-    if (typeof payload.raceDate !== 'string' || !payload.raceDate.trim()) errors.push('payload.raceDate 不能为空');
-    if (typeof payload.raceName !== 'string' || !payload.raceName.trim()) errors.push('payload.raceName 不能为空');
-    
-    if (payload.nutritionAlert !== undefined && (!Number.isInteger(payload.nutritionAlert) || payload.nutritionAlert < 0)) {
-      errors.push('payload.nutritionAlert 必须是非负整数');
-    }
-
-    if (!Number.isInteger(payload.segmentCount) || payload.segmentCount < 0) {
-      errors.push('payload.segmentCount 必须是非负整数');
-    }
-
-    if (!Array.isArray(payload.segments)) {
-      errors.push('payload.segments 必须是数组');
-    } else if (payload.segments.length !== payload.segmentCount) {
-      errors.push('payload.segmentCount 与 payload.segments.length 不一致');
-    }
-
-    if (Array.isArray(payload.segments)) {
-      payload.segments.forEach((segment, index) => {
-        const label = `segments[${index}]`;
-        if (!segment || typeof segment !== 'object' || Array.isArray(segment)) {
-          errors.push(`${label} 必须是对象`);
-          return;
-        }
-        if (segment.segmentIndex !== index + 1) errors.push(`${label}.segmentIndex 应为 ${index + 1}`);
-        if (typeof segment.segmentName !== 'string' || !segment.segmentName.trim()) errors.push(`${label}.segmentName 不能为空`);
-        if (!this.isBleDateTimeString(segment.arrivalTimeBjt)) errors.push(`${label}.arrivalTimeBjt 格式必须为 YYYY-MM-DD HH:mm`);
-        if (segment.cutoffTimeBjt !== '' && !this.isBleDateTimeString(segment.cutoffTimeBjt)) errors.push(`${label}.cutoffTimeBjt 必须为空字符串或 YYYY-MM-DD HH:mm`);
-        if (!Number.isInteger(segment.restMin) || segment.restMin < 0) errors.push(`${label}.restMin 必须是非负整数`);
-      });
-    }
-
-    return { valid: errors.length === 0, errors, payload };
-  },
-
-  testBlePlanPayload(showModal = true) {
-    const localPlanSnapshot = this.saveLocalPlanSnapshot(this.data.checkpoints);
-    const payload = this.buildBlePlanPayload(localPlanSnapshot);
-    const result = this.validateBlePlanPayload(payload);
-
-    this.lastBlePayloadTestResult = result;
-    console.log('[BLE Payload Test] payload =', payload);
-    console.log('[BLE Payload Test] result =', result);
-
-    if (showModal && typeof wx !== 'undefined' && wx.showModal) {
-      if (result.valid) {
-        wx.showModal({
-          title: 'BLE 载荷校验通过',
-          content: `共 ${payload.segmentCount} 段，数据格式正确，可进入发送流程。`,
-          showCancel: false
-        });
-      } else {
-        wx.showModal({
-          title: 'BLE 载荷校验失败',
-          content: result.errors.slice(0, 8).join('\n'),
-          showCancel: false
-        });
-      }
-    }
-    return result;
   },
 
   updateTimesAndPaces(updateTotals = false) {
@@ -752,7 +721,7 @@ Page({
         cp.depAbsoluteMins = currentMinutes;
         cp.arrTime = this.formatTime(currentMinutes);
         cp.depTime = this.formatTime(currentMinutes);
-        cp.pace = "-'--\""; cp.eqPace = "-'--\""; cp.eqDist = "0.00";
+        cp.pace = "-'--\""; cp.eqPace = "-'--\""; cp.eqPaceShort = "-'--\""; cp.eqDist = "0.00";
         cp.isOvertime = false;
         cp.displayCutoffTime = cp.cutoffTime || '--:--';
         return cp;
@@ -771,23 +740,17 @@ Page({
       else if (cp.cutoffTime && cp.cutoffTime !== '--:--') {
         let [cH, cM] = cp.cutoffTime.split(':').map(Number);
         let cMins = cH * 60 + cM;
-        
-        while (cMins < lastCutoffMins) {
-          cMins += 24 * 60;
-        }
+        while (cMins < lastCutoffMins) cMins += 24 * 60;
         cp.absoluteCutoffMins = cMins;
         lastCutoffMins = cMins; 
         runningCutoffMins = cMins; 
         cp.displayCutoffTime = this.formatTime(cMins); 
-      } 
-      else {
+      } else {
         cp.absoluteCutoffMins = null;
         cp.displayCutoffTime = '--:--';
       }
 
-      cp.isOvertime = Number.isFinite(cp.absoluteCutoffMins)
-        ? (currentMinutes > cp.absoluteCutoffMins)
-        : false;
+      cp.isOvertime = Number.isFinite(cp.absoluteCutoffMins) ? (currentMinutes > cp.absoluteCutoffMins) : false;
 
       if (i < arr.length - 1) {
         currentMinutes += cp.rest;
@@ -804,6 +767,9 @@ Page({
       cp.eqDist = eqDist;
       cp.pace = cp.segDist > 0 ? this.formatPace(cp.moveMins / cp.segDist) : "-'--\"";
       cp.eqPace = eqDist > 0 ? this.formatPace(cp.moveMins / eqDist) : "-'--\"";
+      
+      cp.eqPaceShort = eqDist > 0 ? this.formatPaceShort(cp.moveMins / eqDist) : "-'--\"";
+      
       return cp;
     });
 
@@ -817,30 +783,11 @@ Page({
     this.setData(updatePayload);
   },
 
-  onManualUpdate(e) {
-    const { index, type } = e.currentTarget.dataset;
-    const val = parseInt(e.detail.value) || 0;
-    let { checkpoints } = this.data;
-    if (type === 'rest') checkpoints[index].rest = val;
-    else if (type === 'move') checkpoints[index].moveMins = val;
-    this.setData({ checkpoints }, () => this.updateTimesAndPaces(true));
-  },
-
-  onMemoInput(e) {
-    const index = e.currentTarget.dataset.index;
-    const val = e.detail.value;
-    this.setData({
-      [`checkpoints[${index}].memo`]: val
-    });
-  },
-
-  // 渲染海报用的原生海拔图
   drawNativeElevationChart(ctx, cpData, chartX, chartY, chartW, chartH, globalMinE, globalMaxE) {
     const points = this.generateMockPoints(cpData);
     if (!points || points.length === 0) return;
 
     let minD = points[0].d, maxD = points[points.length-1].d;
-    
     let minE = globalMinE;
     let maxE = globalMaxE;
     
@@ -893,13 +840,13 @@ Page({
         const ctx = canvas.getContext('2d');
         
         const W = 1080; 
-        const headerH = 380;
-        const rowH = 180;
+        const headerH = 430; 
+        const rowH = 170; 
         const footerH = 450;
         
-        const { raceName, targetHours, targetMinutes, startTime, checkpoints } = this.data;
+        const { targetHours, targetMinutes, startTime, checkpoints, pureRaceName, raceName, groupDist, groupColor } = this.data;
         
-        const H = headerH + (checkpoints.length * rowH) + footerH;
+        const H = headerH + ((checkpoints.length - 1) * rowH) + footerH;
         canvas.width = W;
         canvas.height = H;
         
@@ -915,18 +862,81 @@ Page({
         
         ctx.fillStyle = '#FFFFFF';
         ctx.font = 'bold 70px Inter';
-        let displayRaceName = raceName;
+        let displayRaceName = pureRaceName || raceName;
         if(displayRaceName.length > 14) displayRaceName = displayRaceName.substring(0, 13) + '...';
         ctx.fillText(displayRaceName, 80, 160);
+        
+        if (groupDist) {
+          let nameWidth = ctx.measureText(displayRaceName).width;
+          let capsuleX = 80 + nameWidth + 24;
+          let capsuleY = 165;
+          ctx.font = 'bold 36px Inter';
+          let distWidth = ctx.measureText(groupDist).width;
+          let capsuleW = distWidth + 40;
+          let capsuleH = 56;
+          
+          ctx.fillStyle = groupColor || '#36E153';
+          
+          let r = 16, x = capsuleX, y = capsuleY, w = capsuleW, h = capsuleH;
+          ctx.beginPath();
+          ctx.moveTo(x + r, y);
+          ctx.lineTo(x + w - r, y);
+          ctx.arcTo(x + w, y, x + w, y + r, r);
+          ctx.lineTo(x + w, y + h - r);
+          ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+          ctx.lineTo(x + r, y + h);
+          ctx.arcTo(x, y + h, x, y + h - r, r);
+          ctx.lineTo(x, y + r);
+          ctx.arcTo(x, y, x + r, y, r);
+          ctx.fill();
+          
+          ctx.fillStyle = '#000000';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(groupDist, capsuleX + capsuleW / 2, capsuleY + capsuleH / 2 + 2);
+          
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+        }
         
         ctx.fillStyle = 'rgba(255,255,255,0.6)';
         ctx.font = '36px sans-serif';
         ctx.fillText(`计划用时: ${targetHours}h ${targetMinutes}m   |   发枪时间: ${startTime}`, 80, 260);
+
+        let listHeaderCenterY = 320; 
+        
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = '28px sans-serif';
+        
+        const col1X = 140;
+        const col2X = 310;
+        const col3X = 470;
+        const col4X = 680;
+        const col5X = 930;
+
+        ctx.fillText('地点', col1X, listHeaderCenterY);
+        ctx.fillText('海拔图', col4X, listHeaderCenterY);
+        ctx.fillText('赛道信息', col5X, listHeaderCenterY);
+
+        ctx.textBaseline = 'top';
+        ctx.fillText('计划用时(m)', col2X, listHeaderCenterY - 18);
+        ctx.fillText('休息(m)', col3X, listHeaderCenterY - 18);
+        
+        ctx.font = '22px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fillText('(平均等强)', col2X, listHeaderCenterY + 12);
+        ctx.fillText('(到达时间)', col3X, listHeaderCenterY + 12);
+        
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
         
         ctx.strokeStyle = 'rgba(255,255,255,0.2)';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(80, headerH - 20);
+        ctx.moveTo(80, headerH - 20); 
         ctx.lineTo(W - 80, headerH - 20);
         ctx.stroke();
 
@@ -959,59 +969,64 @@ Page({
 
         let currentY = headerH;
         
-        for (let i = 0; i < checkpoints.length; i++) {
+        for (let i = 1; i < checkpoints.length; i++) {
           const cp = checkpoints[i];
-          const y = currentY + (i * rowH);
+          const y = currentY + ((i - 1) * rowH);
           
+          ctx.textAlign = 'center';
           ctx.fillStyle = '#FFFFFF';
           ctx.font = 'bold 50px Inter';
-          ctx.textAlign = 'left';
-          ctx.fillText(cp.cpNum, 80, y + 55);
+          ctx.fillText(cp.cpNum, col1X, y + 20); 
           
+          let subY = y + 80;
           if (cp.isDropBag) {
              ctx.fillStyle = 'rgba(255,255,255,0.4)';
              ctx.font = '28px sans-serif';
-             ctx.fillText('换装点', 80, y + 115);
+             ctx.fillText('换装点', col1X, subY);
+             subY += 36;
           }
           
-          if (i > 0) {
-            ctx.textAlign = 'center';
-            
-            ctx.fillStyle = 'rgba(255,255,255,0.5)';
-            ctx.font = '28px sans-serif';
-            ctx.fillText('用时(m)', 300, y + 40);
-            ctx.fillStyle = '#FFAA16';
-            ctx.font = 'bold 45px Inter';
-            ctx.fillText((cp.moveMins || 0).toString(), 300, y + 85);
-            
-            if (i < checkpoints.length - 1) {
-              ctx.fillStyle = 'rgba(255,255,255,0.5)';
-              ctx.font = '28px sans-serif';
-              ctx.fillText('休息(m)', 460, y + 40);
-              ctx.fillStyle = '#3284FF';
-              ctx.font = 'bold 45px Inter';
-              ctx.fillText((cp.rest || 0).toString(), 460, y + 85);
-            }
-
-            this.drawNativeElevationChart(ctx, cp, 580, y + 40, 200, 100, globalMinE, globalMaxE);
-            
-            ctx.textAlign = 'right';
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = 'bold 45px Inter';
-            ctx.fillText(cp.segDist + ' KM', W - 80, y + 40);
-            
-            ctx.font = 'bold 32px Inter';
-            ctx.fillStyle = '#F94747'; 
-            ctx.fillText('+' + cp.segGain, W - 190, y + 100); 
-            ctx.fillStyle = '#5CF947'; 
-            ctx.fillText('-' + cp.segLoss, W - 80, y + 100);
-            
-          } else {
-             ctx.textAlign = 'right';
+          if (cp.displayCutoffTime && cp.displayCutoffTime !== '--:--') {
              ctx.fillStyle = 'rgba(255,255,255,0.4)';
-             ctx.font = '40px Inter';
-             ctx.fillText('START', W - 80, y + 60);
+             ctx.font = '24px sans-serif';
+             ctx.fillText(`${cp.displayCutoffTime}关门`, col1X, subY);
           }
+          
+          ctx.textAlign = 'center';
+          
+          ctx.fillStyle = '#FFAA16';
+          ctx.font = 'bold 45px Inter';
+          ctx.fillText((cp.moveMins || 0).toString(), col2X, y + 30); 
+          
+          ctx.fillStyle = 'rgba(255,255,255,0.5)';
+          ctx.font = '24px sans-serif';
+          ctx.fillText(`(${cp.eqPaceShort})`, col2X, y + 85);
+
+          if (i < checkpoints.length - 1) {
+            ctx.fillStyle = '#3284FF';
+            ctx.font = 'bold 45px Inter';
+            ctx.fillText((cp.rest || 0).toString(), col3X, y + 30); 
+            ctx.fillStyle = cp.isOvertime ? '#F94747' : 'rgba(255,255,255,0.5)';
+            ctx.font = '24px sans-serif';
+            ctx.fillText(`(${cp.arrTime})`, col3X, y + 85);
+          } else {
+            ctx.fillStyle = cp.isOvertime ? '#F94747' : 'rgba(255,255,255,0.5)';
+            ctx.font = '24px sans-serif';
+            ctx.fillText(`(${cp.arrTime})`, col3X, y + 85); 
+          }
+
+          this.drawNativeElevationChart(ctx, cp, col4X - 100, y + 30, 200, 90, globalMinE, globalMaxE);
+          
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 45px Inter';
+          ctx.fillText(cp.segDist + ' KM', col5X, y + 30);
+          
+          ctx.font = 'bold 32px Inter';
+          ctx.fillStyle = '#F94747'; 
+          ctx.fillText('+' + cp.segGain, col5X - 50, y + 90); 
+          ctx.fillStyle = '#5CF947'; 
+          ctx.fillText('-' + cp.segLoss, col5X + 50, y + 90);
           
           ctx.strokeStyle = 'rgba(255,255,255,0.1)';
           ctx.beginPath();
@@ -1020,7 +1035,7 @@ Page({
           ctx.stroke();
         }
         
-        const footerY = currentY + (checkpoints.length * rowH);
+        const footerY = currentY + ((checkpoints.length - 1) * rowH);
         
         await drawImg('/images/qrcode.png', (W - 220) / 2, footerY + 80, 220, 220);
         
@@ -1067,16 +1082,9 @@ Page({
     
     const localPlanSnapshot = this.saveLocalPlanSnapshot(this.data.checkpoints);
     const {
-      raceId,
-      raceName,
-      groupDist,
-      raceDate,
-      startTime,
-      targetHours,
-      targetMinutes,
-      nutritionVal,   
-      nutritionIndex, 
-      checkpoints
+      raceId, raceName, groupDist, raceDate,
+      startTime, targetHours, targetMinutes,
+      nutritionVal, nutritionIndex, checkpoints
     } = localPlanSnapshot;
 
     let raceDateMs = 0;
@@ -1108,6 +1116,7 @@ Page({
       }
 
       wx.hideLoading();
+      this.setUnsavedChanges(false); 
       return true; 
     } catch (err) {
       console.error("☁️ 云端保存失败:", err);
@@ -1150,18 +1159,12 @@ Page({
     let payloadForBleLog = null;
     const uploadSuccess = await this.uploadPlanToCloud();
     payloadForBleLog = this.buildBlePlanPayload();
-    console.log('[BLE Send] payload object =', payloadForBleLog);
-    console.log('[BLE Send] payload json =', JSON.stringify(payloadForBleLog));
 
     wx.showLoading({ title: '正在打包路书...', mask: true });
 
     try {
-      // 发送 JSON 格式的 BLE 载荷
       const jsonContent = JSON.stringify(payloadForBleLog);
-      console.log('[JSON Generated]', jsonContent);
-
       const jsonBuffer = stringToUtf8ArrayBuffer(jsonContent);
-      console.log('[JSON Buffer] Length:', jsonBuffer.byteLength);
 
       wx.hideLoading();
 
@@ -1177,7 +1180,6 @@ Page({
         chunkSize: 230,
         writeDelayMs: 20,
         onProgress: (progress) => {
-          console.log('[BLE Progress]', progress);
           wx.showLoading({
             title: `传输中 ${progress.percent}%`,
             mask: true
@@ -1190,7 +1192,6 @@ Page({
 
     } catch (err) {
       wx.hideLoading();
-      console.error('[BLE Error]', err);
       wx.showModal({
         title: '同步失败',
         content: err.message || '请检查设备连接后重试',
@@ -1206,5 +1207,22 @@ Page({
     });
   },
 
-  goBack() { wx.navigateBack(); }
+  goBack() { 
+    if (this.data.hasUnsavedChanges) {
+      this.setData({ showUnsavedModal: true });
+    } else {
+      wx.navigateBack(); 
+    }
+  },
+
+  modalDiscardAndExit() {
+    this.setData({ showUnsavedModal: false });
+    this.setUnsavedChanges(false);
+    wx.navigateBack();
+  },
+
+  modalSaveAndSync() {
+    this.setData({ showUnsavedModal: false });
+    this.syncToHardware();
+  }
 });

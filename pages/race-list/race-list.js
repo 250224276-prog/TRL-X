@@ -8,11 +8,14 @@ Page({
     groupedRaces: [],   
     searchKeyword: '',  
 
+    // ✨ 新增：时间分流 Tab，默认显示未来赛事
+    timeTab: 'future', // 'future' | 'past'
+
     // 筛选面板相关状态
     showFilter: false,
     activeFilterCount: 0, 
     
-    // ✨ 地区展示文案，单独拎出来维护
+    // 地区展示文案，单独拎出来维护
     regionDisplayText: '', 
 
     // 用户的选择暂存区
@@ -70,13 +73,23 @@ Page({
   },
 
   // ==========================================
-  // ✨ 核心过滤引擎 
+  // ✨ 核心过滤引擎 (注入时间分流)
   // ==========================================
   applyFilters() {
-    const { allRaces, searchKeyword, filterOptions } = this.data;
+    const { allRaces, searchKeyword, filterOptions, timeTab } = this.data;
     let filteredList = [...allRaces];
+    const nowMs = new Date().setHours(0, 0, 0, 0); // 获取今天凌晨0点作为分界线
 
-    // 1. 过滤搜索词
+    // 0. ✨ 核心分流：先区分未来与历史
+    filteredList = filteredList.filter(race => {
+      if (timeTab === 'future') {
+        return race.timeMs >= nowMs; // 今天及以后
+      } else {
+        return race.timeMs < nowMs;  // 昨天及以前
+      }
+    });
+
+    // 1. 过滤搜索词 (此时搜索已经只会查当前 Tab 下的比赛了)
     if (searchKeyword.trim() !== '') {
       const kw = searchKeyword.trim().toLowerCase();
       filteredList = filteredList.filter(race => {
@@ -91,16 +104,14 @@ Page({
       filteredList = filteredList.filter(race => race.hasItra === true);
     }
 
-    // 3. 过滤 地区 (✨ 新增处理 "全部" 逻辑)
+    // 3. 过滤 地区 (处理 "全部" 逻辑)
     if (filterOptions.region && filterOptions.region.length > 0 && filterOptions.region[0] !== '全部') {
-      // 提取纯净地名（去掉省市等后缀增加容错率）
       const prov = filterOptions.region[0].replace(/省|市|自治区/g, ''); 
       const city = filterOptions.region[1] === '全部' ? '' : filterOptions.region[1].replace(/市|自治州|地区/g, '');
       const dist = filterOptions.region[2] === '全部' ? '' : filterOptions.region[2].replace(/区|县|市/g, '');
       
       filteredList = filteredList.filter(race => {
         const loc = race.location || '';
-        // 逻辑：如果选了区，必须包含区；没选区但选了市，必须包含市；都没选，则只需包含省份
         if (dist) return loc.includes(dist);
         if (city) return loc.includes(city);
         return loc.includes(prov);
@@ -189,6 +200,23 @@ Page({
   // ==========================================
   // 面板与交互事件
   // ==========================================
+  
+  // ✨ 切换未来/历史 Tab
+  switchTimeTab(e) {
+    const tab = e.currentTarget.dataset.tab;
+    if (this.data.timeTab === tab) return;
+
+    // 智能化：看未来赛事默认“从近到远(asc)”，看历史赛事默认“从远到近(desc)”
+    const autoSort = tab === 'future' ? 'asc' : 'desc';
+
+    this.setData({ 
+      timeTab: tab,
+      'filterOptions.sort': autoSort
+    }, () => {
+      this.applyFilters();
+    });
+  },
+
   onSearchInput(e) {
     this.setData({ searchKeyword: e.detail.value }, () => this.applyFilters());
   },
@@ -204,19 +232,18 @@ Page({
   selectDist(e) { this.setData({ 'filterOptions.distance': e.currentTarget.dataset.val }); },
   selectSort(e) { this.setData({ 'filterOptions.sort': e.currentTarget.dataset.val }); }, 
   
-  // ✨ 新增：对含有“全部”的地区数组进行优雅显示解析
   onRegionChange(e) { 
     const val = e.detail.value;
     let displayText = '';
 
     if (val[0] === '全部') {
-      displayText = '全国'; // 选了三个全部
+      displayText = '全国';
     } else if (val[1] === '全部') {
-      displayText = val[0]; // 只选了省份
+      displayText = val[0]; 
     } else if (val[2] === '全部') {
-      displayText = `${val[0]} ${val[1]}`; // 选了省市
+      displayText = `${val[0]} ${val[1]}`; 
     } else {
-      displayText = `${val[0]} ${val[1]} ${val[2]}`; // 全选
+      displayText = `${val[0]} ${val[1]} ${val[2]}`; 
     }
 
     this.setData({ 
@@ -230,7 +257,11 @@ Page({
 
   resetFilters() {
     this.setData({
-      filterOptions: { itra: 'all', distance: 'all', region: [], startDate: '', endDate: '', sort: 'asc' },
+      filterOptions: { 
+        itra: 'all', distance: 'all', region: [], 
+        startDate: '', endDate: '', 
+        sort: this.data.timeTab === 'future' ? 'asc' : 'desc' // 重置时保留智能排序
+      },
       regionDisplayText: ''
     });
   },
@@ -240,10 +271,12 @@ Page({
     const opt = this.data.filterOptions;
     if (opt.itra !== 'all') count++;
     if (opt.distance !== 'all') count++;
-    // 如果第一项不是“全部”，说明确实设置了地区筛选
     if (opt.region.length > 0 && opt.region[0] !== '全部') count++;
     if (opt.startDate || opt.endDate) count++;
-    if (opt.sort !== 'asc') count++;
+    
+    // 只有当用户主动选择的排序和智能默认排序不一致时，才亮起筛选红点
+    const defaultSort = this.data.timeTab === 'future' ? 'asc' : 'desc';
+    if (opt.sort !== defaultSort) count++;
 
     this.setData({ 
       showFilter: false,

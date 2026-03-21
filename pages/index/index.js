@@ -9,7 +9,7 @@ Page({
     
     isConnected: false,
     deviceName: 'AST的\nRMB PRO',
-    hasMoreRaces: false // ✨ 新增：判断是否超过10场比赛
+    hasMoreRaces: false 
   },
 
   onLoad() {
@@ -29,22 +29,34 @@ Page({
     this.fetchMyPlans();
   },
 
+  // ✨ 新增：组别颜色智能解析引擎
+  getGroupColor(distStr) {
+    if (!distStr) return '#36E153'; // 默认绿色
+    // 提取字符串中的数字部分
+    let numStr = distStr.replace(/[^\d.]/g, ''); 
+    let dist = parseFloat(numStr) || 0;
+    
+    // 按照赛事筛选的里程标准划分颜色
+    if (dist < 30) return '#36E153';       // 绿色 (短距离)
+    if (dist < 60) return '#FF9811';       // 橙色 (中距离)
+    if (dist < 100) return '#3284FF';      // 蓝色 (长距离)
+    return '#F94747';                      // 红色 (超长距离 100km+)
+  },
+
   fetchMyPlans() {
     db.collection('user_plans').orderBy('raceDateMs', 'asc').get({
       success: res => {
         let plans = res.data;
-        const nowMs = new Date().setHours(0, 0, 0, 0); // 获取今天凌晨0点的时间戳
+        const nowMs = new Date().setHours(0, 0, 0, 0); 
 
         let futurePlans = [];
 
         plans.forEach(p => {
           let daysLeft = -1;
           if (p.raceDateMs && p.raceDateMs >= nowMs) {
-            // 计算剩余天数，防止同一天被算成负数
             daysLeft = Math.ceil((p.raceDateMs - new Date().getTime()) / (1000 * 60 * 60 * 24));
-            if (daysLeft < 0) daysLeft = 0; // 兜底：如果是今天，直接置为 0
+            if (daysLeft < 0) daysLeft = 0; 
           } else {
-            // 比赛时间在今天之前，直接跳过不展示在首页
             return; 
           }
           
@@ -53,9 +65,13 @@ Page({
             pureName = pureName.replace(` - ${p.groupDist}`, '').replace(p.groupDist, '').trim();
           }
 
+          // ✨ 给每个计划动态计算组别颜色
+          let groupColor = this.getGroupColor(p.groupDist);
+
           futurePlans.push({
             ...p,
             pureRaceName: pureName,
+            groupColor: groupColor, // 注入颜色变量
             daysLeft: daysLeft,
             displayTime: p.targetHours ? `${p.targetHours}h ${p.targetMinutes}min` : '未制定计划'
           });
@@ -80,7 +96,7 @@ Page({
 
   fetchCloudRaces() {
     wx.showLoading({ title: '加载中...', mask: true });
-    const nowMs = new Date().setHours(0, 0, 0, 0); // 获取今天凌晨0点
+    const nowMs = new Date().setHours(0, 0, 0, 0); 
 
     db.collection('races').get({
       success: res => {
@@ -88,12 +104,10 @@ Page({
           return this.parseTime(a.date) - this.parseTime(b.date);
         });
 
-        // 过滤：只保留日期大于等于今天的比赛
         let futureRaces = sortedRaces.filter(race => {
           return this.parseTime(race.date) >= nowMs;
         });
 
-        // ✨ 核心修改：只截取前10个距离最近的比赛，并判断是否还有更多
         const MAX_DISPLAY = 10;
         const displayRaces = futureRaces.slice(0, MAX_DISPLAY);
         const hasMore = futureRaces.length > MAX_DISPLAY;
@@ -114,8 +128,6 @@ Page({
 
   goToMyPlan(e) {
     const planId = e.currentTarget.dataset.id;
-    console.log("👉 [点击我的计划] 拿到的计划ID是：", planId);
-    
     if (!planId) {
       wx.showToast({ title: '数据异常无法跳转', icon: 'none' });
       return;
@@ -124,20 +136,15 @@ Page({
     wx.navigateTo({
       url: `/pages/plan-result/plan-result?id=${planId}`,
       fail: err => {
-        console.error("❌ 跳转到 plan-result 失败：", err);
+        console.error("❌ 跳转失败：", err);
         wx.showToast({ title: '页面跳转失败', icon: 'none' });
       }
     });
   },
 
-  goToMorePlans() {
-    wx.navigateTo({ url: '/pages/my-plans/my-plans' });
-  },
-
+  goToMorePlans() { wx.navigateTo({ url: '/pages/my-plans/my-plans' }); },
   goToConnect() { wx.navigateTo({ url: '/pages/ble-connect/ble-connect' }); },
   goToMore() { wx.navigateTo({ url: '/pages/race-list/race-list' }); },
-  goToDetail(e) {
-    wx.navigateTo({ url: `/pages/race-detail/race-detail?id=${e.currentTarget.dataset.id}` });
-  },
+  goToDetail(e) { wx.navigateTo({ url: `/pages/race-detail/race-detail?id=${e.currentTarget.dataset.id}` }); },
   goToProfile() { wx.switchTab({ url: '/pages/profile/profile' }); }
 });

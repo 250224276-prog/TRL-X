@@ -1,5 +1,5 @@
 /* ========================================== */
-/* ✨ 新增：为了让内部滚动生效，外层必须锁死且设定为 Flex 布局 */
+/* 外层锁死且设定为 Flex 布局 */
 /* ========================================== */
 page {
   height: 100vh;
@@ -145,7 +145,7 @@ page {
 .my-plan-card {
   width: 100%;
   background: rgba(255, 255, 255, 0.11);
-  border-radius: 40rpx; 
+  border-radius: 40rpx;
   padding: 8rpx 36rpx; 
   box-sizing: border-box;
 }
@@ -179,32 +179,32 @@ page {
   font-weight: 700;
   font-size: 28rpx; 
   color: #FFFFFF;
-  white-space: nowrap; 
+  white-space: nowrap;
   overflow: hidden; 
   text-overflow: ellipsis; 
   flex-shrink: 1; 
 }
 
+/* ✨ 修复了写死的绿色，现由 JS 动态写入 Style 控制 */
 .plan-group-tag {
   background: rgba(255, 255, 255, 0.08);
   border-radius: 16rpx; 
-  padding: 2rpx 10rpx; 
+  padding: 2rpx 10rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 1rpx solid rgba(255, 255, 255, 0.05);
   font-family: 'Inter', sans-serif;
   font-size: 16rpx; 
-  font-weight: 600; 
+  font-weight: 600;
   line-height: 1;
-  color: #36E153; 
   flex-shrink: 0;
 }
 
 .plan-date {
   font-family: 'Inter', sans-serif;
   font-weight: 500;
-  font-size: 18rpx; 
+  font-size: 18rpx;
   color: rgba(255, 255, 255, 0.4);
   margin-top: 2rpx;
 }
@@ -214,7 +214,7 @@ page {
   flex-direction: column;
   align-items: flex-end;
   gap: 4rpx; 
-  margin-right: 30rpx; 
+  margin-right: 30rpx;
   flex-shrink: 0;
 }
 
@@ -360,9 +360,6 @@ page {
   line-height: 1;
 }
 
-/* ========================================== */
-/* ✨ 新增：底部加载更多按钮样式 */
-/* ========================================== */
 .load-more-btn {
   width: 100%;
   height: 90rpx;
@@ -413,7 +410,7 @@ page {
 }
 
 .tab-item:not(.active) .tab-text {
-  opacity: 0.5; 
+  opacity: 0.5;
 }
 
 .tab-item.active .tab-text {
@@ -433,9 +430,6 @@ page {
   color: #FFFFFF;
 }
 
-/* ========================================== */
-/* 隐藏极其丑陋的滚动条 */
-/* ========================================== */
 ::-webkit-scrollbar {
   width: 0;
   height: 0;

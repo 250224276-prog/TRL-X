@@ -96,18 +96,18 @@
 }
 
 /* ========================================== */
-/* 3. ✨ 组别选择器 (带有滑动光块) */
+/* 3. 组别选择器 (带有滑动光块) */
 /* ========================================== */
 .distance-selector {
   margin-top: 40rpx;
   width: 600rpx; 
   height: 68rpx;
-  background: rgba(255, 255, 255, 0.08); /* 加深底色突出光块 */
+  background: rgba(255, 255, 255, 0.08); 
   border-radius: 34rpx;
   display: flex;
   align-items: center;
-  position: relative; /* 供绝对定位的光块使用 */
-  overflow: hidden; /* 切掉光块的方角 */
+  position: relative; 
+  overflow: hidden; 
 }
 
 .dist-slider-bg {
@@ -115,10 +115,10 @@
   height: 100%;
   left: 0;
   top: 0;
-  background: rgba(255, 255, 255, 0.15); /* 高亮光块 */
+  background: rgba(255, 255, 255, 0.15); 
   border-radius: 34rpx;
   transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
-  z-index: 1; /* 在文字底层 */
+  z-index: 1; 
 }
 
 .dist-btn {
@@ -129,14 +129,14 @@
   align-items: center;
   font-family: 'PingFang SC', sans-serif;
   font-size: 32rpx; 
-  font-weight: 600; /* 加粗文字增加质感 */
+  font-weight: 600; 
   position: relative;
-  z-index: 2; /* 浮在光块上层 */
+  z-index: 2;
   transition: opacity 0.3s ease;
 }
 
 /* ========================================== */
-/* 4. ✨ Tab 切换面板 (带有滑动光块) */
+/* 4. Tab 切换面板 (带有滑动光块) */
 /* ========================================== */
 .tab-switcher {
   margin-top: 30rpx;
@@ -153,7 +153,7 @@
 
 .tab-slider-bg {
   position: absolute;
-  width: 50%; /* 固定 2 个 Tab 所以是 50% */
+  width: 50%; 
   height: 100%;
   left: 0;
   top: 0;
@@ -170,7 +170,7 @@
   justify-content: center;
   align-items: center;
   font-family: 'Hiragino Sans GB', sans-serif;
-  font-size: 28rpx; /* 字体稍微缩减更显精致 */
+  font-size: 28rpx;
   font-weight: 600;
   color: #FFFFFF;
   opacity: 0.5;
@@ -184,7 +184,7 @@
 }
 
 /* ========================================== */
-/* 5. 内容区：比赛详细 (✨ 紧凑版关键数据) */
+/* 5. 内容区：比赛详细 */
 /* ========================================== */
 .content-detail {
   margin-top: 40rpx;
@@ -194,40 +194,38 @@
   font-size: 34rpx;
   font-weight: 600;
   display: block;
-  margin-bottom: 24rpx; /* 收紧标题与卡片的间距 */
+  margin-bottom: 24rpx;
 }
 
-/* ✨ 高密度关键数据卡片 */
 .key-data-card {
   background: rgba(255, 255, 255, 0.11);
-  border-radius: 32rpx; /* 圆角改小更凌厉 */
-  padding: 10rpx 40rpx; /* 收紧内边距 */
+  border-radius: 32rpx;
+  padding: 10rpx 40rpx; 
   margin-bottom: 50rpx;
 }
 .data-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24rpx 0; /* 行高收紧 */
-  border-bottom: 1rpx solid rgba(255, 255, 255, 0.1); /* 分割线变淡 */
+  padding: 24rpx 0; 
+  border-bottom: 1rpx solid rgba(255, 255, 255, 0.1);
 }
 .data-row.border-none {
   border-bottom: none; 
 }
 .data-label {
-  font-size: 26rpx; /* 弱化 Label 字号 */
+  font-size: 26rpx; 
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.6); /* 降低透明度，建立层级 */
+  color: rgba(255, 255, 255, 0.6); 
 }
 .data-value {
-  font-size: 28rpx; /* 适度缩小 Value 字号 */
+  font-size: 28rpx; 
   font-weight: 600;
 }
 
-/* 详细地图图片 */
 .detail-map {
   width: 100%;
-  border-radius: 32rpx; /* 统一圆角 */
+  border-radius: 32rpx; 
   background: rgba(255, 255, 255, 0.1);
   margin-bottom: 50rpx;
 }
@@ -240,7 +238,6 @@
   min-height: 500rpx;
 }
 
-/* 时间输入卡片 */
 .time-input-card {
   background: rgba(255, 255, 255, 0.11);
   border-radius: 44rpx;
@@ -282,16 +279,16 @@
   margin-top: -50rpx; 
 }
 
-/* ✨ 发枪时间胶囊 (带有滑动光块) */
+/* ✨ 发枪时间胶囊阵列 */
 .capsule-container {
   display: flex;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 40rpx;
-  height: 80rpx; /* 取消了 padding，利用 height 撑起结构 */
+  height: 80rpx;
   width: 100%;
   position: relative;
   overflow: hidden;
-  margin-bottom: 120rpx; 
+  margin-bottom: 120rpx;
 }
 
 .capsule-slider-bg {

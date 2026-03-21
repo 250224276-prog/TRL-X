@@ -42,7 +42,8 @@ page {
   text-align: center;
   font-family: 'PingFang SC', sans-serif;
   font-weight: 600;
-  font-size: 34rpx;
+  font-size: 28rpx;
+  color: #ffffff96;
 }
 
 /* 搜索与筛选控制栏 */
@@ -398,4 +399,40 @@ page {
 .date-separator {
   font-size: 26rpx;
   color: rgba(255, 255, 255, 0.5);
+}
+/* ========================================== */
+/* ✨ 新增：顶部 Tab 切换栏样式 (继承极客风) */
+/* ========================================== */
+.tab-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 80rpx;
+  margin-top: 10rpx;
+  margin-bottom: 10rpx;
+  flex-shrink: 0;
+}
+.tab-item {
+  position: relative;
+  font-family: 'PingFang SC', sans-serif;
+  font-size: 30rpx;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  padding-bottom: 16rpx;
+  transition: all 0.3s ease;
+}
+.tab-item.active {
+  color: #FFFFFF;
+  font-weight: 600;
+  font-size: 32rpx;
+}
+.tab-line {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40rpx;
+  height: 6rpx;
+  background-color: #FF9811; /* 使用赛事页面的主题橙色 */
+  border-radius: 6rpx;
 }

@@ -3,11 +3,9 @@ const db = wx.cloud.database();
 
 Page({
   data: {
-    // ✨ 状态标识：新建还是编辑
     mode: 'create', 
     currentRaceId: null,
 
-    // 赛事全局基础信息
     raceName: '',
     raceDate: '',
     location: '',
@@ -15,17 +13,14 @@ Page({
     coverImgPath: '', 
     oldCoverFileId: '',
 
-    colorList: ['#36E153', '#FF9811', '#209BFF', '#E53935', '#A220FF', '#FFFFFF'],
-    colorNames: ['荧光绿', '品牌橙', '赛博蓝', '竞速红', '暗夜紫', '纯白'],
-
     groups: [
       {
         dist: '', cutoffTime: '', 
-        themeColorIndex: 0, 
-        startTime1: '07:00', startTime2: '', 
+        computedColor: '#FFFFFF', // ✨ 新增：动态计算的颜色
+        startTimes: ['07:00'],    // ✨ 新增：动态发枪时间数组
         detailMapPath: '', gpxFilePath: '', gpxFileName: '',
         oldMapFileId: '', oldGpxFileId: '',
-        actualDist: '', elevation: '' // 补全字段
+        actualDist: '', elevation: '' 
       }
     ]
   },
@@ -38,6 +33,18 @@ Page({
     }
   },
 
+  // ✨ 新增：组别颜色智能解析引擎 (与首页保持绝对一致)
+  getGroupColor(distStr) {
+    if (!distStr) return '#FFFFFF'; 
+    let numStr = distStr.replace(/[^\d.]/g, ''); 
+    let dist = parseFloat(numStr) || 0;
+    
+    if (dist < 30) return '#36E153';       // 绿色 (短距离)
+    if (dist < 60) return '#FF9811';       // 橙色 (中距离)
+    if (dist < 100) return '#3284FF';      // 蓝色 (长距离)
+    return '#F94747';                      // 红色 (超长距离 100km+)
+  },
+
   async loadRaceData(raceId) {
     wx.showLoading({ title: '加载赛事数据...', mask: true });
     try {
@@ -45,20 +52,24 @@ Page({
       const race = res.data;
 
       let loadedGroups = race.groups.map(g => {
-        let cIdx = this.data.colorList.indexOf(g.themeColor);
-        if (cIdx === -1) cIdx = 0;
+        // 兼容旧数据的发枪时间
+        let stArray = g.startTimes || [];
+        if (stArray.length === 0) {
+          if (g.startTime) stArray.push(g.startTime);
+          if (g.startTime2) stArray.push(g.startTime2);
+          if (stArray.length === 0) stArray.push('07:00'); // 兜底
+        }
+
         return {
           dist: g.dist || '',
+          computedColor: this.getGroupColor(g.dist || ''), // 自动计算颜色
           cutoffTime: g.cutoffTime || '',
-          themeColorIndex: cIdx,
-          startTime1: g.startTime || '07:00',
-          startTime2: g.startTime2 || '',
+          startTimes: stArray,
           detailMapPath: g.detailMapImg || '', 
           gpxFilePath: g.gpxFileID || '',      
           gpxFileName: g.gpxFileID ? '已上传历史GPX (点击可重传)' : '',
           oldMapFileId: g.detailMapImg || '',
           oldGpxFileId: g.gpxFileID || '',
-          // 确保解析好的数据能在编辑模式下得以继承
           actualDist: g.actualDist || '', 
           elevation: g.elevation || '',
           checkpoints: g.checkpoints || []
@@ -66,7 +77,7 @@ Page({
       });
 
       if (loadedGroups.length === 0) {
-        loadedGroups = [{ dist: '', cutoffTime: '', themeColorIndex: 0, startTime1: '07:00', startTime2: '', detailMapPath: '', gpxFilePath: '', gpxFileName: '', actualDist: '', elevation: '' }];
+        loadedGroups = [{ dist: '', cutoffTime: '', computedColor: '#FFFFFF', startTimes: ['07:00'], detailMapPath: '', gpxFilePath: '', gpxFileName: '', actualDist: '', elevation: '' }];
       }
 
       this.setData({
@@ -102,7 +113,7 @@ Page({
     const newGroups = this.data.groups;
     newGroups.push({
       dist: '', cutoffTime: '', 
-      themeColorIndex: 0, startTime1: '07:00', startTime2: '',
+      computedColor: '#FFFFFF', startTimes: ['07:00'],
       detailMapPath: '', gpxFilePath: '', gpxFileName: '', actualDist: '', elevation: ''
     });
     this.setData({ groups: newGroups });
@@ -119,7 +130,44 @@ Page({
   onGroupInput(e) {
     const { index, field } = e.currentTarget.dataset;
     const value = e.detail.value;
-    this.setData({ [`groups[${index}].${field}`]: value });
+    
+    // 如果修改的是距离，同时动态触发颜色的计算并更新
+    if (field === 'dist') {
+      const color = this.getGroupColor(value);
+      this.setData({ 
+        [`groups[${index}].dist`]: value,
+        [`groups[${index}].computedColor`]: color
+      });
+    } else {
+      this.setData({ [`groups[${index}].${field}`]: value });
+    }
+  },
+
+  // ✨ 动态发枪时间逻辑
+  onStartTimeChange(e) {
+    const groupIndex = e.currentTarget.dataset.groupIndex;
+    const stIndex = e.currentTarget.dataset.stIndex;
+    this.setData({
+      [`groups[${groupIndex}].startTimes[${stIndex}]`]: e.detail.value
+    });
+  },
+
+  addStartTime(e) {
+    const groupIndex = e.currentTarget.dataset.groupIndex;
+    const groups = this.data.groups;
+    groups[groupIndex].startTimes.push('07:00');
+    this.setData({ groups });
+  },
+
+  removeStartTime(e) {
+    const groupIndex = e.currentTarget.dataset.groupIndex;
+    const stIndex = e.currentTarget.dataset.stIndex;
+    const groups = this.data.groups;
+    if (groups[groupIndex].startTimes.length <= 1) {
+      return wx.showToast({ title: '至少保留一个发枪时间', icon: 'none' });
+    }
+    groups[groupIndex].startTimes.splice(stIndex, 1);
+    this.setData({ groups });
   },
   
   chooseGroupMap(e) {
@@ -130,34 +178,23 @@ Page({
     });
   },
 
-  // ✨ 核心修改：放开 extension 限制，通过 JS 手动校验
   chooseGroupGpx(e) {
     const index = e.currentTarget.dataset.index;
     wx.chooseMessageFile({
       count: 1, 
-      type: 'file', // 彻底放开，让微信系统显示所有文件
+      type: 'file',
       success: res => {
         const file = res.tempFiles[0];
-        
-        // 自动拦截：如果选了非 GPX 文件，直接报错阻断
         if (!file.name.toLowerCase().endsWith('.gpx')) {
-          wx.showToast({ 
-            title: '格式错误，只能选 GPX 文件', 
-            icon: 'none',
-            duration: 2000
-          });
+          wx.showToast({ title: '格式错误，只能选 GPX 文件', icon: 'none', duration: 2000 });
           return;
         }
-
-        // 校验通过，存入数据
         this.setData({
           [`groups[${index}].gpxFilePath`]: file.path,
           [`groups[${index}].gpxFileName`]: file.name
         });
       },
-      fail: err => {
-        console.log("选择文件失败或取消", err);
-      }
+      fail: err => console.log("选择文件失败", err)
     });
   },
 
@@ -171,7 +208,6 @@ Page({
       if (!this.isTempFile(localPath) && localPath.startsWith('cloud://')) {
         resolve(localPath); return; 
       }
-      
       const extMatch = localPath.match(/\.[^.]+?$/);
       const ext = extMatch ? extMatch[0] : '.png'; 
       const cloudPath = `${folderName}/${Date.now()}-${Math.floor(Math.random()*1000)}${ext}`;
@@ -185,7 +221,7 @@ Page({
   },
 
   async submitAndIgnite() {
-    const { mode, currentRaceId, raceName, raceDate, location, hasItra, coverImgPath, groups, colorList } = this.data;
+    const { mode, currentRaceId, raceName, raceDate, location, hasItra, coverImgPath, groups } = this.data;
 
     if (!raceName || !raceDate) {
       return wx.showToast({ title: '至少填写比赛名称和日期', icon: 'none' });
@@ -208,8 +244,9 @@ Page({
           
           const mapFileID = await this.uploadToCloud(g.detailMapPath, 'race-maps');
           const gpxFileID = await this.uploadToCloud(g.gpxFilePath, 'gpx-tracks');
-          const hexColor = colorList[g.themeColorIndex];
-
+          
+          // ✨ 提取我们计算好的动态颜色存入库中
+          const hexColor = g.computedColor;
           tags.push({ dist: g.dist, color: hexColor });
 
           let needsParse = false;
@@ -224,8 +261,12 @@ Page({
             elevation: needsParse ? '排队解析中...' : (g.elevation || '待上传GPX'),  
             cutoffTime: g.cutoffTime || '',
             themeColor: hexColor,
-            startTime: g.startTime1,
-            startTime2: g.startTime2 || null, 
+            
+            // ✨ 保存全新的数组结构，并保留前两个坑位给旧代码兜底
+            startTimes: g.startTimes, 
+            startTime: g.startTimes[0] || '07:00',
+            startTime2: g.startTimes[1] || null, 
+            
             detailMapImg: mapFileID,
             gpxFileID: gpxFileID,
             checkpoints: g.checkpoints || [] 
@@ -248,7 +289,6 @@ Page({
         await db.collection('races').doc(targetRaceId).update({ data: finalData });
       }
 
-      // 修复：使用 await 保证串行调用，防止数据库并发更新冲突
       if (gpxIndexesToParse.length > 0) {
         for (let idx of gpxIndexesToParse) {
           wx.showLoading({ title: `引擎解析 ${dbGroups[idx].dist} 轨迹...`, mask: true });
