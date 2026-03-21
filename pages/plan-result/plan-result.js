@@ -258,7 +258,6 @@ Page({
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // ✨ 交互胶囊：高级磨砂玻璃圆角版本
     if (touchX !== null && touchX >= 0 && touchX <= width) {
       let closestPoint = points[0];
       let minDiff = Infinity;
@@ -273,7 +272,6 @@ Page({
       let focusX = getX(closestPoint.d);
       let focusY = getY(closestPoint.e);
 
-      // 竖线指示器
       ctx.beginPath();
       ctx.moveTo(focusX, 0);
       ctx.lineTo(focusX, height - padding.bottom);
@@ -281,7 +279,6 @@ Page({
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // 指示器圆点
       ctx.beginPath();
       ctx.arc(focusX, focusY, 4, 0, 2 * Math.PI);
       ctx.fillStyle = '#FFFFFF';
@@ -290,21 +287,17 @@ Page({
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      // 胶囊尺寸设定
       const tipW = 86;
       const tipH = 46; 
       let tipX = focusX - tipW / 2;
       let tipY = focusY - tipH - 12;
       
-      // 边界保护
       if (tipX < 2) tipX = 2;
       if (tipX + tipW > width - 2) tipX = width - tipW - 2;
       if (tipY < 2) tipY = focusY + 15;
 
-      // ✨ 完美圆角：半径设为高度的一半
       const r = tipH / 2; 
 
-      // 1. 绘制外部阴影（模拟玻璃悬浮的立体感）
       ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
       ctx.shadowBlur = 8;
       ctx.shadowOffsetY = 4;
@@ -321,19 +314,15 @@ Page({
       ctx.arcTo(tipX, tipY, tipX + r, tipY, r);
       ctx.closePath();
 
-      // 2. 模拟暗色磨砂玻璃材质（高透黑灰色）
       ctx.fillStyle = 'rgba(30, 30, 32, 0.85)';
       ctx.fill();
 
-      // 3. 关闭阴影，准备画边框和文字（防止文字自带阴影导致模糊）
       ctx.shadowColor = 'transparent';
 
-      // 4. 绘制玻璃材质边缘的细微高光反光边框
       ctx.lineWidth = 1;
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
       ctx.stroke();
 
-      // 5. 绘制文字
       ctx.fillStyle = '#FFFFFF';
       ctx.font = 'bold 12px sans-serif';
       ctx.textAlign = 'center';
@@ -903,7 +892,8 @@ Page({
         ctx.font = '36px sans-serif';
         ctx.fillText(`计划用时: ${targetHours}h ${targetMinutes}m   |   发枪时间: ${startTime}`, 80, 260);
 
-        let listHeaderCenterY = 320; 
+        // ✨ 让表头文字(340)向下更贴近白线(380)
+        let listHeaderCenterY = 340; 
         
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -936,8 +926,9 @@ Page({
         ctx.strokeStyle = 'rgba(255,255,255,0.2)';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(80, headerH - 20); 
-        ctx.lineTo(W - 80, headerH - 20);
+        // ✨ 白线上移到 380 坐标位置，让文字与白线的间距变小
+        ctx.moveTo(80, headerH - 10); 
+        ctx.lineTo(W - 80, headerH - 10);
         ctx.stroke();
 
         const drawImg = (src, x, y, w, h) => {
@@ -971,19 +962,24 @@ Page({
         
         for (let i = 1; i < checkpoints.length; i++) {
           const cp = checkpoints[i];
-          const y = currentY + ((i - 1) * rowH);
+          const yCenter = currentY + ((i - 1) * rowH) + (rowH / 2);
           
           ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+
+          let hasSub = cp.isDropBag || (cp.displayCutoffTime && cp.displayCutoffTime !== '--:--');
+          let mainY = hasSub ? yCenter - 18 : yCenter;
+          
           ctx.fillStyle = '#FFFFFF';
           ctx.font = 'bold 50px Inter';
-          ctx.fillText(cp.cpNum, col1X, y + 20); 
+          ctx.fillText(cp.cpNum, col1X, mainY); 
           
-          let subY = y + 80;
+          let subY = yCenter + 22;
           if (cp.isDropBag) {
              ctx.fillStyle = 'rgba(255,255,255,0.4)';
              ctx.font = '28px sans-serif';
              ctx.fillText('换装点', col1X, subY);
-             subY += 36;
+             subY += 34; 
           }
           
           if (cp.displayCutoffTime && cp.displayCutoffTime !== '--:--') {
@@ -992,46 +988,40 @@ Page({
              ctx.fillText(`${cp.displayCutoffTime}关门`, col1X, subY);
           }
           
-          ctx.textAlign = 'center';
-          
           ctx.fillStyle = '#FFAA16';
           ctx.font = 'bold 45px Inter';
-          ctx.fillText((cp.moveMins || 0).toString(), col2X, y + 30); 
+          ctx.fillText((cp.moveMins || 0).toString(), col2X, yCenter - 18); 
           
           ctx.fillStyle = 'rgba(255,255,255,0.5)';
           ctx.font = '24px sans-serif';
-          ctx.fillText(`(${cp.eqPaceShort})`, col2X, y + 85);
+          ctx.fillText(`(${cp.eqPaceShort})`, col2X, yCenter + 26);
 
           if (i < checkpoints.length - 1) {
             ctx.fillStyle = '#3284FF';
             ctx.font = 'bold 45px Inter';
-            ctx.fillText((cp.rest || 0).toString(), col3X, y + 30); 
-            ctx.fillStyle = cp.isOvertime ? '#F94747' : 'rgba(255,255,255,0.5)';
-            ctx.font = '24px sans-serif';
-            ctx.fillText(`(${cp.arrTime})`, col3X, y + 85);
-          } else {
-            ctx.fillStyle = cp.isOvertime ? '#F94747' : 'rgba(255,255,255,0.5)';
-            ctx.font = '24px sans-serif';
-            ctx.fillText(`(${cp.arrTime})`, col3X, y + 85); 
+            ctx.fillText((cp.rest || 0).toString(), col3X, yCenter - 18); 
           }
+          ctx.fillStyle = cp.isOvertime ? '#F94747' : 'rgba(255,255,255,0.5)';
+          ctx.font = '24px sans-serif';
+          ctx.fillText(`(${cp.arrTime})`, col3X, yCenter + 26);
 
-          this.drawNativeElevationChart(ctx, cp, col4X - 100, y + 30, 200, 90, globalMinE, globalMaxE);
+          this.drawNativeElevationChart(ctx, cp, col4X - 100, yCenter - 45, 200, 90, globalMinE, globalMaxE);
           
-          ctx.textAlign = 'center';
           ctx.fillStyle = '#FFFFFF';
           ctx.font = 'bold 45px Inter';
-          ctx.fillText(cp.segDist + ' KM', col5X, y + 30);
+          ctx.fillText(cp.segDist + ' KM', col5X, yCenter - 18);
           
           ctx.font = 'bold 32px Inter';
           ctx.fillStyle = '#F94747'; 
-          ctx.fillText('+' + cp.segGain, col5X - 50, y + 90); 
+          ctx.fillText('+' + cp.segGain, col5X - 50, yCenter + 26); 
           ctx.fillStyle = '#5CF947'; 
-          ctx.fillText('-' + cp.segLoss, col5X + 50, y + 90);
+          ctx.fillText('-' + cp.segLoss, col5X + 50, yCenter + 26);
           
           ctx.strokeStyle = 'rgba(255,255,255,0.1)';
           ctx.beginPath();
-          ctx.moveTo(80, y + rowH);
-          ctx.lineTo(W - 80, y + rowH);
+          let lineY = currentY + i * rowH;
+          ctx.moveTo(80, lineY);
+          ctx.lineTo(W - 80, lineY);
           ctx.stroke();
         }
         
