@@ -8,6 +8,149 @@ const {
   sendKmlBufferToBle
 } = require('../../utils/kml-sender');
 
+const DEFAULT_CURVE_K = 1.07;
+const STRATEGY_K_DELTA = 0.14;
+const DEFAULT_STRATEGY_SLIDER = Math.max(0, Math.min(100, Math.round(50 - (((DEFAULT_CURVE_K - 1) / STRATEGY_K_DELTA) * 50))));
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function createHourOptions() {
+  return Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, '0')}:00`);
+}
+
+function createDefaultEffortConfig() {
+  return {
+    base: {
+      runHikeThresholdEnabled: false,
+      runHikeThreshold: 12
+    },
+    physiology: {
+      altitudeThresholdEnabled: false,
+      altitudeThreshold: 1800,
+      altitudePenaltyEnabled: false,
+      altitudePenalty: 8,
+      nightPenaltyEnabled: false,
+      nightPenalty: 6,
+      nightStartHour: 20,
+      nightEndHour: 6
+    },
+    terrain: {
+      uphillSkillEnabled: false,
+      uphillSkill: 100,
+      downhillSkillEnabled: false,
+      downhillSkill: 100
+    }
+  };
+}
+
+const FACTOR_HELP_CONTENT = {
+  base: {
+    runHikeThreshold: {
+      title: '跑走切换阈值',
+      content: '表示坡度大到什么程度时，更适合从跑切到快走。阈值越低，系统越容易把陡坡按徒步处理；阈值越高，则会保留更多跑动。'
+    }
+  },
+  physiology: {
+    altitudeThreshold: {
+      title: '海拔阈值',
+      content: '表示从多高开始，系统认为海拔会影响你的发挥。阈值越低，越早开始考虑高海拔影响；阈值越高，说明你对海拔更适应。'
+    },
+    altitudePenalty: {
+      title: '高海拔惩罚',
+      content: '表示超过海拔阈值后，每升高一些海拔会放慢多少。数值越高，高海拔路段越保守；如果你有适应经验，可以适当调低。'
+    },
+    nightPenalty: {
+      title: '夜间惩罚',
+      content: '用于模拟夜跑时视野、专注力和节奏下降带来的影响。数值越高，夜间时段分配的时间越多；下方还可以自定义夜间窗口，比如 20:00 到次日 06:00。'
+    }
+  },
+  terrain: {
+    uphillSkill: {
+      title: '上坡能力',
+      content: '表示你处理爬升的能力。数值越高，系统越认为你在上坡段不会被拖太多；数值越低，上坡分段会更保守。'
+    },
+    downhillSkill: {
+      title: '下坡能力',
+      content: '表示你在下降路段保持效率的能力。数值越高，技术性或长下降会更敢放速度；数值越低，系统会给下坡留更多余量。'
+    }
+  }
+};
+
+const STRATEGY_HELP_INFO = {
+  title: '配速策略',
+  content: '这里的 K 值控制的是整场比赛的时间分配曲线，不是每公里固定掉速。K=1 更接近按等强距离线性分配；K>1 更偏前快后慢，后程会分到更多时间；K<1 更偏前慢后快，前程会分到更多时间。图里显示的是每个分段的平均等强配速。'
+};
+
+const LINKED_EFFORT_FIELDS = {
+  physiology: {
+    altitudeThreshold: ['altitudePenalty'],
+    altitudePenalty: ['altitudeThreshold']
+  }
+};
+
+function cloneEffortConfig(config = createDefaultEffortConfig()) {
+  return JSON.parse(JSON.stringify(config));
+}
+
+function normalizeEffortConfig(rawConfig = {}) {
+  const defaults = createDefaultEffortConfig();
+  const rawBase = rawConfig.base || {};
+  const rawPhysiology = rawConfig.physiology || {};
+  const rawTerrain = rawConfig.terrain || {};
+  const resolveEnabled = (rawGroup, key, fallback = false) => {
+    if (typeof rawGroup[key] === 'boolean') return rawGroup[key];
+    if (typeof rawGroup.enabled === 'boolean') return rawGroup.enabled;
+    return fallback;
+  };
+  const normalized = {
+    base: {
+      runHikeThresholdEnabled: resolveEnabled(rawBase, 'runHikeThresholdEnabled', defaults.base.runHikeThresholdEnabled),
+      runHikeThreshold: Number.isFinite(Number(rawBase.runHikeThreshold)) ? Number(rawBase.runHikeThreshold) : defaults.base.runHikeThreshold
+    },
+    physiology: {
+      altitudeThresholdEnabled: resolveEnabled(rawPhysiology, 'altitudeThresholdEnabled', defaults.physiology.altitudeThresholdEnabled),
+      altitudeThreshold: Number.isFinite(Number(rawPhysiology.altitudeThreshold)) ? Number(rawPhysiology.altitudeThreshold) : defaults.physiology.altitudeThreshold,
+      altitudePenaltyEnabled: resolveEnabled(rawPhysiology, 'altitudePenaltyEnabled', defaults.physiology.altitudePenaltyEnabled),
+      altitudePenalty: Number.isFinite(Number(rawPhysiology.altitudePenalty)) ? Number(rawPhysiology.altitudePenalty) : defaults.physiology.altitudePenalty,
+      nightPenaltyEnabled: resolveEnabled(rawPhysiology, 'nightPenaltyEnabled', defaults.physiology.nightPenaltyEnabled),
+      nightPenalty: Number.isFinite(Number(rawPhysiology.nightPenalty)) ? Number(rawPhysiology.nightPenalty) : defaults.physiology.nightPenalty,
+      nightStartHour: clamp(Number.isFinite(Number(rawPhysiology.nightStartHour)) ? Number(rawPhysiology.nightStartHour) : defaults.physiology.nightStartHour, 0, 23),
+      nightEndHour: clamp(Number.isFinite(Number(rawPhysiology.nightEndHour)) ? Number(rawPhysiology.nightEndHour) : defaults.physiology.nightEndHour, 0, 23)
+    },
+    terrain: {
+      uphillSkillEnabled: resolveEnabled(rawTerrain, 'uphillSkillEnabled', defaults.terrain.uphillSkillEnabled),
+      uphillSkill: Number.isFinite(Number(rawTerrain.uphillSkill)) ? Number(rawTerrain.uphillSkill) : defaults.terrain.uphillSkill,
+      downhillSkillEnabled: resolveEnabled(rawTerrain, 'downhillSkillEnabled', defaults.terrain.downhillSkillEnabled),
+      downhillSkill: Number.isFinite(Number(rawTerrain.downhillSkill)) ? Number(rawTerrain.downhillSkill) : defaults.terrain.downhillSkill
+    }
+  };
+  normalized.physiology.altitudeThresholdEnabled = normalized.physiology.altitudeThresholdEnabled || normalized.physiology.altitudePenaltyEnabled;
+  normalized.physiology.altitudePenaltyEnabled = normalized.physiology.altitudeThresholdEnabled;
+  return normalized;
+}
+
+function svgToDataUri(svgText = '') {
+  const utf8 = unescape(encodeURIComponent(String(svgText || '')));
+  const bytes = new Uint8Array(utf8.length);
+  for (let i = 0; i < utf8.length; i++) {
+    bytes[i] = utf8.charCodeAt(i);
+  }
+  return `data:image/svg+xml;base64,${wx.arrayBufferToBase64(bytes.buffer)}`;
+}
+
+function hexToRgba(hex = '#FFFFFF', alpha = 1) {
+  const safeHex = String(hex).replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(safeHex)) {
+    return `rgba(255,255,255,${alpha})`;
+  }
+  const r = parseInt(safeHex.slice(0, 2), 16);
+  const g = parseInt(safeHex.slice(2, 4), 16);
+  const b = parseInt(safeHex.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 Page({
   data: {
     raceId: '',
@@ -32,6 +175,16 @@ Page({
     nutritionRange: [],
     nutritionIndex: 29, 
     nutritionVal: '30m', 
+    hourOptions: createHourOptions(),
+
+    showEffortPanel: false,
+    paceStrategySlider: DEFAULT_STRATEGY_SLIDER,
+    strategyModeLabel: '前快后慢',
+    strategyModeDetail: `K=${DEFAULT_CURVE_K.toFixed(2)} | 当前默认底模`,
+    strategyFastestPace: "--'--\"",
+    strategySlowestPace: "--'--\"",
+    paceStrategyChartSvg: '',
+    effortConfig: createDefaultEffortConfig(),
 
     checkpoints: [],
     blePlanPayload: null,
@@ -39,6 +192,7 @@ Page({
     showDetail: false,
     detailCurrent: 0,
     detailCpName: '',
+    detailGradeMode: false,
     
     isScrollTop: true,
     chartReady: {},
@@ -99,6 +253,404 @@ Page({
     return `${m}'${s < 10 ? '0'+s : s}"`;
   },
 
+  getStrategyKValue(slider = this.data.paceStrategySlider) {
+    const normalized = clamp((50 - Number(slider)) / 50, -1, 1);
+    return 1 + (normalized * STRATEGY_K_DELTA);
+  },
+
+  getStrategyModeLabel(slider = this.data.paceStrategySlider) {
+    const kValue = this.getStrategyKValue(slider);
+    if (kValue > 1.015) return '前快后慢';
+    if (kValue < 0.985) return '前慢后快';
+    return '全程匀速';
+  },
+
+  buildStrategyModeDetail(slider = this.data.paceStrategySlider) {
+    const kValue = this.getStrategyKValue(slider);
+    const deltaFromLinear = kValue - 1;
+    const deltaFromDefault = kValue - DEFAULT_CURVE_K;
+    if (Math.abs(deltaFromLinear) < 0.015) {
+      return `K=${kValue.toFixed(2)} | 按等效距离线性分配`;
+    }
+    if (Math.abs(deltaFromDefault) < 0.015) {
+      return `K=${kValue.toFixed(2)} | 与当前默认算法接近`;
+    }
+    if (kValue > 1) {
+      return `K=${kValue.toFixed(2)} | 后程分配更多时间`;
+    }
+    return `K=${kValue.toFixed(2)} | 后程更主动更紧凑`;
+  },
+
+  estimateArrivalTimes(checkpoints, movePlan, startMins) {
+    const arrivals = [];
+    let currentMinutes = startMins;
+    arrivals[0] = currentMinutes;
+    for (let i = 1; i < checkpoints.length; i++) {
+      currentMinutes += movePlan[i] || 0;
+      arrivals[i] = currentMinutes;
+      if (i < checkpoints.length - 1) {
+        currentMinutes += parseInt(checkpoints[i].rest || 0, 10) || 0;
+      }
+    }
+    return arrivals;
+  },
+
+  smoothStrategyBaseWeights(baseMoveWeights = [], checkpoints = [], curveK = 1) {
+    if (!Array.isArray(baseMoveWeights) || !Array.isArray(checkpoints)) return baseMoveWeights;
+    const kNorm = clamp(Math.abs((Number(curveK) || 1) - 1) / STRATEGY_K_DELTA, 0, 1);
+    if (kNorm < 0.05) return baseMoveWeights;
+
+    const active = [];
+    for (let i = 1; i < checkpoints.length; i++) {
+      const segED = Math.max(0.01, Number(checkpoints[i]?.segED) || 0.01);
+      const weight = Math.max(0.01, Number(baseMoveWeights[i]) || 0.01);
+      active.push({ index: i, segED, weight, bias: weight / segED });
+    }
+    if (active.length < 2) return baseMoveWeights;
+
+    const blend = 0.12 + (kNorm * 0.26);
+    const maxNeighborRatio = 1.22 - (kNorm * 0.10);
+    const smoothedBias = active.map((item, index) => {
+      const prev = active[Math.max(0, index - 1)].bias;
+      const curr = item.bias;
+      const next = active[Math.min(active.length - 1, index + 1)].bias;
+      const neighborAvg = index === 0
+        ? ((curr * 2) + next) / 3
+        : (index === active.length - 1 ? ((prev + (curr * 2)) / 3) : ((prev + (curr * 2) + next) / 4));
+      return (curr * (1 - blend)) + (neighborAvg * blend);
+    });
+
+    for (let i = 1; i < smoothedBias.length; i++) {
+      smoothedBias[i] = clamp(smoothedBias[i], smoothedBias[i - 1] / maxNeighborRatio, smoothedBias[i - 1] * maxNeighborRatio);
+    }
+    for (let i = smoothedBias.length - 2; i >= 0; i--) {
+      smoothedBias[i] = clamp(smoothedBias[i], smoothedBias[i + 1] / maxNeighborRatio, smoothedBias[i + 1] * maxNeighborRatio);
+    }
+
+    const result = [...baseMoveWeights];
+    active.forEach((item, index) => {
+      result[item.index] = Math.max(0.01, item.segED * smoothedBias[index]);
+    });
+    return result;
+  },
+
+  isHourWithinWindow(hour, startHour, endHour) {
+    if (!Number.isFinite(hour)) return false;
+    if (startHour === endHour) return true;
+    if (startHour < endHour) return hour >= startHour && hour < endHour;
+    return hour >= startHour || hour < endHour;
+  },
+
+  distributeRoundedMinutes(weights, totalMinutes) {
+    const result = new Array(weights.length).fill(0);
+    const indices = [];
+    let weightSum = 0;
+
+    weights.forEach((weight, index) => {
+      if (index === 0) return;
+      const safeWeight = Math.max(0, Number(weight) || 0);
+      result[index] = 0;
+      indices.push(index);
+      weightSum += safeWeight;
+    });
+
+    if (indices.length === 0) return result;
+    if (weightSum <= 0) {
+      const evenShare = Math.floor(totalMinutes / indices.length);
+      let remainder = totalMinutes - (evenShare * indices.length);
+      indices.forEach(index => { result[index] = evenShare; });
+      for (let i = 0; i < remainder; i++) result[indices[i % indices.length]] += 1;
+      return result;
+    }
+
+    let allocated = 0;
+    const remainders = [];
+    indices.forEach(index => {
+      const exact = totalMinutes * (Math.max(0, Number(weights[index]) || 0) / weightSum);
+      const whole = Math.floor(exact);
+      result[index] = whole;
+      allocated += whole;
+      remainders.push({ index, remainder: exact - whole });
+    });
+
+    remainders.sort((a, b) => b.remainder - a.remainder);
+    let leftover = totalMinutes - allocated;
+    for (let i = 0; i < leftover; i++) {
+      result[remainders[i % remainders.length].index] += 1;
+    }
+
+    return result;
+  },
+
+  collectStrategySegments(checkpoints = [], movePlan = null) {
+    const segments = [];
+    let totalMove = 0;
+    let totalEqDist = 0;
+    let runningDist = 0;
+
+    for (let i = 1; i < checkpoints.length; i++) {
+      const cp = checkpoints[i];
+      const segDist = Number(cp.segDist) || 0;
+      if (segDist <= 0) continue;
+      const moveMins = movePlan ? (Number(movePlan[i]) || 0) : (Number(cp.moveMins) || 0);
+      const eqDist = Math.max(0.01, Number(cp.eqDist) || (segDist + ((Number(cp.segGain) || 0) / 100)));
+      const eqPace = moveMins / eqDist;
+      const distStart = runningDist;
+      runningDist += segDist;
+      totalMove += moveMins;
+      totalEqDist += eqDist;
+      segments.push({
+        distStart,
+        distEnd: runningDist,
+        segDist,
+        eqPace: Math.max(0.01, eqPace)
+      });
+    }
+
+    return {
+      segments,
+      avgEqPace: totalEqDist > 0 ? (totalMove / totalEqDist) : 0,
+      fastest: segments.length > 0 ? Math.min(...segments.map(item => item.eqPace)) : 0,
+      slowest: segments.length > 0 ? Math.max(...segments.map(item => item.eqPace)) : 0,
+      totalDist: runningDist
+    };
+  },
+
+  buildStrategyPreviewMovePlan(checkpoints = [], slider = this.data.paceStrategySlider) {
+    if (!Array.isArray(checkpoints) || checkpoints.length <= 1) return null;
+
+    const targetMins = ((parseInt(this.data.targetHours, 10) || 0) * 60) + (parseInt(this.data.targetMinutes, 10) || 0);
+    const totalRest = checkpoints.reduce((sum, cp) => sum + (parseInt(cp.rest || 0, 10) || 0), 0);
+    const movingMins = targetMins - totalRest;
+    if (movingMins <= 0) return null;
+
+    const virtualCheckpoints = checkpoints.map(cp => ({ ...cp }));
+    let totalED = 0;
+    let activeSegments = 0;
+
+    virtualCheckpoints.forEach((cp) => {
+      cp.segED = (Number(cp.segDist) || 0) + ((Number(cp.segGain) || 0) / 100);
+      totalED += cp.segED;
+      if ((Number(cp.segED) || 0) > 0) activeSegments += 1;
+    });
+
+    if (totalED <= 0 || activeSegments <= 0) return null;
+
+    const curveK = this.getStrategyKValue(slider);
+    const avgSegED = totalED / activeSegments;
+    const curveAnchorED = Math.max(1, avgSegED * 0.85, totalED * 0.06);
+    const curveBase = Math.pow(curveAnchorED, curveK);
+    const curveSpan = Math.pow(totalED + curveAnchorED, curveK) - curveBase;
+    let runningED = 0;
+    let previousExactMins = 0;
+    const baseMoveWeights = virtualCheckpoints.map(() => 0);
+
+    virtualCheckpoints.forEach((cp, index) => {
+      if (index === 0) return;
+      runningED += cp.segED;
+      const exactMinsSoFar = curveSpan > 0
+        ? movingMins * ((Math.pow(runningED + curveAnchorED, curveK) - curveBase) / curveSpan)
+        : (movingMins * (runningED / Math.max(0.01, totalED)));
+      baseMoveWeights[index] = Math.max(0.01, exactMinsSoFar - previousExactMins);
+      previousExactMins = exactMinsSoFar;
+    });
+
+    const smoothedBaseWeights = this.smoothStrategyBaseWeights(baseMoveWeights, virtualCheckpoints, curveK);
+    const baseMoveMins = this.distributeRoundedMinutes(smoothedBaseWeights, movingMins);
+    const [startH, startM] = String(this.data.startTime || '07:00').split(':').map(Number);
+    const startMins = ((startH || 0) * 60) + (startM || 0);
+    return this.applyAdvancedPacingModel(baseMoveMins, virtualCheckpoints, movingMins, startMins);
+  },
+
+  getFixedStrategyAxisBounds(checkpoints = []) {
+    const maxKMovePlan = this.buildStrategyPreviewMovePlan(checkpoints, 0);
+    const minKMovePlan = this.buildStrategyPreviewMovePlan(checkpoints, 100);
+    const maxKMetrics = maxKMovePlan ? this.collectStrategySegments(checkpoints, maxKMovePlan) : null;
+    const minKMetrics = minKMovePlan ? this.collectStrategySegments(checkpoints, minKMovePlan) : null;
+    const candidateFast = [
+      maxKMetrics && maxKMetrics.fastest,
+      minKMetrics && minKMetrics.fastest
+    ].filter(value => Number.isFinite(value) && value > 0);
+    const candidateSlow = [
+      maxKMetrics && maxKMetrics.slowest,
+      minKMetrics && minKMetrics.slowest
+    ].filter(value => Number.isFinite(value) && value > 0);
+    const fixedFast = candidateFast.length ? Math.min(...candidateFast) : 0;
+    const fixedSlow = candidateSlow.length ? Math.max(...candidateSlow) : 0;
+    if (!(fixedFast > 0) || !(fixedSlow > 0) || fixedSlow <= fixedFast) return null;
+    return {
+      yMin: Math.max(1.5, fixedFast - 0.45),
+      yMax: fixedSlow + 0.55
+    };
+  },
+
+  buildPaceStrategyVisual(checkpoints = this.data.checkpoints) {
+    const { segments, avgEqPace, fastest, slowest, totalDist } = this.collectStrategySegments(checkpoints);
+    const axisBounds = this.getFixedStrategyAxisBounds(checkpoints);
+
+    return {
+      strategyModeLabel: this.getStrategyModeLabel(),
+      strategyModeDetail: this.buildStrategyModeDetail(),
+      strategyFastestPace: fastest > 0 ? this.formatPaceShort(fastest) : "-'--\"",
+      strategySlowestPace: slowest > 0 ? this.formatPaceShort(slowest) : "-'--\"",
+      paceStrategyChartSvg: this.buildPaceStrategyChartSvg(segments, avgEqPace, fastest, slowest, totalDist, axisBounds)
+    };
+  },
+
+  buildPaceStrategyChartSvg(segments = [], avgPace = 0, fastest = 0, slowest = 0, totalDist = 0, axisBounds = null) {
+    const width = 680;
+    const height = 340;
+    const padLeft = 74;
+    const padRight = 18;
+    const padTop = 18;
+    const padBottom = 56;
+    const chartW = width - padLeft - padRight;
+    const chartH = height - padTop - padBottom;
+
+    const safeAvg = avgPace > 0 ? avgPace : 6;
+    const safeFast = fastest > 0 ? fastest : safeAvg * 0.95;
+    const safeSlow = slowest > 0 ? slowest : safeAvg * 1.05;
+    const yMin = axisBounds && Number.isFinite(axisBounds.yMin) ? axisBounds.yMin : Math.max(1.5, safeFast - 0.45);
+    const yMax = axisBounds && Number.isFinite(axisBounds.yMax) ? axisBounds.yMax : (safeSlow + 0.55);
+    const yRange = Math.max(0.5, yMax - yMin);
+    const total = totalDist > 0 ? totalDist : 10;
+
+    const paceToY = pace => padTop + ((pace - yMin) / yRange) * chartH;
+    const distToX = dist => padLeft + ((dist / total) * chartW);
+    const baselineY = paceToY(safeAvg);
+
+    let linePath = '';
+    if (segments.length > 0) {
+      const firstY = paceToY(segments[0].eqPace);
+      linePath = `M ${padLeft.toFixed(1)} ${firstY.toFixed(1)}`;
+      segments.forEach((segment, index) => {
+        const xEnd = distToX(segment.distEnd);
+        const currentY = paceToY(segment.eqPace);
+        linePath += ` L ${xEnd.toFixed(1)} ${currentY.toFixed(1)}`;
+        if (index < segments.length - 1) {
+          const nextY = paceToY(segments[index + 1].eqPace);
+          linePath += ` L ${xEnd.toFixed(1)} ${nextY.toFixed(1)}`;
+        }
+      });
+    } else {
+      linePath = `M ${padLeft.toFixed(1)} ${baselineY.toFixed(1)} L ${(padLeft + chartW).toFixed(1)} ${baselineY.toFixed(1)}`;
+    }
+
+    const gridYs = [0, 0.33, 0.66, 1].map(step => padTop + (chartH * step));
+    const yLabels = [
+      this.formatPaceShort(yMin),
+      this.formatPaceShort(yMin + (yRange * 0.33)),
+      this.formatPaceShort(yMin + (yRange * 0.66)),
+      this.formatPaceShort(yMax)
+    ];
+    const xLabels = [0, total / 3, (total * 2) / 3, total].map(value => {
+      const compact = value.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+      return compact;
+    });
+    const xPositions = [0, total / 3, (total * 2) / 3, total].map(distToX);
+
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">
+        <rect x="0" y="0" width="${width}" height="${height}" rx="0" fill="transparent" />
+        <line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${padTop + chartH}" stroke="rgba(255,255,255,0.14)" stroke-width="1.5" />
+        <line x1="${padLeft}" y1="${padTop + chartH}" x2="${width - padRight}" y2="${padTop + chartH}" stroke="rgba(255,255,255,0.14)" stroke-width="1.5" />
+        ${gridYs.map(y => `<line x1="${padLeft}" y1="${y.toFixed(1)}" x2="${width - padRight}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.12)" stroke-width="1" />`).join('')}
+        <line x1="${padLeft}" y1="${baselineY.toFixed(1)}" x2="${width - padRight}" y2="${baselineY.toFixed(1)}" stroke="#D45A57" stroke-width="2" stroke-dasharray="10 8" />
+        <path d="${linePath}" fill="none" stroke="#34C759" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" />
+        <text x="${padLeft}" y="14" fill="rgba(255,255,255,0.42)" font-size="18">等强配速</text>
+        ${yLabels.map((label, index) => `<text x="${padLeft - 16}" y="${gridYs[index].toFixed(1)}" fill="rgba(255,255,255,0.45)" font-size="20" text-anchor="end" dominant-baseline="middle">${label}</text>`).join('')}
+        ${xLabels.map((label, index) => `<text x="${xPositions[index].toFixed(1)}" y="${height - 18}" fill="rgba(255,255,255,0.45)" font-size="20" text-anchor="middle">${label}</text>`).join('')}
+      </svg>
+    `.trim();
+    return svgToDataUri(svg);
+  },
+
+  toggleEffortPanel() {
+    this.setData({ showEffortPanel: !this.data.showEffortPanel });
+  },
+
+  resetPaceStrategy() {
+    this.setData({ paceStrategySlider: DEFAULT_STRATEGY_SLIDER }, () => {
+      this.runFatigueEngine();
+      this.setUnsavedChanges(true);
+    });
+  },
+
+  onStrategySliderChange(e) {
+    const value = Number(e.detail.value);
+    this.setData({ paceStrategySlider: value }, () => {
+      this.runFatigueEngine();
+      this.setUnsavedChanges(true);
+    });
+  },
+
+  onStrategySliderChanging(e) {
+    const value = Number(e.detail.value);
+    if (value === this.data.paceStrategySlider) return;
+    this.setData({ paceStrategySlider: value }, () => {
+      this.runFatigueEngine();
+      this.setUnsavedChanges(true);
+    });
+  },
+
+  onEffortSwitch(e) {
+    const { group, field } = e.currentTarget.dataset;
+    if (!group || !field) return;
+    const value = !!e.detail.value;
+    const updatePayload = {
+      [`effortConfig.${group}.${field}Enabled`]: value
+    };
+    const linkedFields = (LINKED_EFFORT_FIELDS[group] && LINKED_EFFORT_FIELDS[group][field]) || [];
+    linkedFields.forEach(linkedField => {
+      updatePayload[`effortConfig.${group}.${linkedField}Enabled`] = value;
+    });
+    this.setData(updatePayload, () => {
+      this.runFatigueEngine();
+      this.setUnsavedChanges(true);
+    });
+  },
+
+  onEffortSliderChange(e) {
+    const { group, field } = e.currentTarget.dataset;
+    const value = Number(e.detail.value);
+    this.setData({ [`effortConfig.${group}.${field}`]: value }, () => {
+      this.runFatigueEngine();
+      this.setUnsavedChanges(true);
+    });
+  },
+
+  onNightWindowChange(e) {
+    const { field } = e.currentTarget.dataset;
+    const value = clamp(Number(e.detail.value), 0, 23);
+    this.setData({ [`effortConfig.physiology.${field}`]: value }, () => {
+      this.runFatigueEngine();
+      this.setUnsavedChanges(true);
+    });
+  },
+
+  showFactorHelp(e) {
+    const { group, field } = e.currentTarget.dataset;
+    const info = FACTOR_HELP_CONTENT[group] && FACTOR_HELP_CONTENT[group][field];
+    if (!info) return;
+    wx.showModal({
+      title: info.title,
+      content: info.content,
+      showCancel: false,
+      confirmText: '我知道了',
+      confirmColor: '#FF9811'
+    });
+  },
+
+  showStrategyHelp() {
+    wx.showModal({
+      title: STRATEGY_HELP_INFO.title,
+      content: STRATEGY_HELP_INFO.content,
+      showCancel: false,
+      confirmText: '我知道了',
+      confirmColor: '#FF9811'
+    });
+  },
+
   goToSegmentDetail(e) {
     const index = e.currentTarget.dataset.index;
     if (index === 0) return; 
@@ -110,6 +662,12 @@ Page({
   },
 
   closeDetail() { this.setData({ showDetail: false }); },
+
+  toggleDetailGradeMode() {
+    this.setData({ detailGradeMode: !this.data.detailGradeMode }, () => {
+      this.drawChartBase(null);
+    });
+  },
 
   onDetailSwiperChange(e) { 
     const current = e.detail.current;
@@ -146,7 +704,7 @@ Page({
     const cpData = this.data.checkpoints[cpIndex];
     if (!cpData) return;
 
-    const query = wx.createSelectorQuery();
+    const query = wx.createSelectorQuery().in(this);
     query.select(`#elevChart_${cpIndex}`).fields({ node: true, size: true }).exec((res) => {
       if (!res[0] || !res[0].node) return;
       
@@ -159,6 +717,7 @@ Page({
       ctx.scale(dpr, dpr);
 
       const points = this.generateMockPoints(cpData);
+      if (!Array.isArray(points) || points.length < 2) return;
 
       this.currentChart = { 
         ctx, canvas, width: res[0].width, height: res[0].height, points, cpData 
@@ -169,27 +728,269 @@ Page({
     });
   },
 
-  generateMockPoints(cp) {
-    if (cp.rawPoints && cp.rawPoints.length > 0) return cp.rawPoints; 
-    let pts = [];
-    const steps = 100;
-    const startDist = cp.accDist - cp.segDist;
-    const distStep = cp.segDist / steps;
-    const eleDiff = cp.endEle - cp.startEle;
+  buildInlineSvgProfile(points = []) {
+    if (!Array.isArray(points) || points.length < 2) return '';
 
-    for(let i=0; i<=steps; i++) {
-      let d = startDist + (distStep * i);
-      let noise = Math.sin(i * 0.5) * (cp.segGain * 0.2) * Math.random();
-      let e = cp.startEle + eleDiff * (i/steps) + noise;
-      e = Math.max(0, e); 
+    const sampled = [];
+    const step = Math.max(1, Math.floor(points.length / 30));
+    for (let i = 0; i < points.length; i += step) {
+      sampled.push(points[i]);
+    }
+    if (sampled[sampled.length - 1] !== points[points.length - 1]) {
+      sampled.push(points[points.length - 1]);
+    }
+
+    const distances = sampled.map(point => Number(point.d)).filter(value => Number.isFinite(value));
+    const elevations = sampled.map(point => Number(point.e)).filter(value => Number.isFinite(value));
+    if (distances.length < 2 || elevations.length < 2) return '';
+
+    const minD = Math.min(...distances);
+    const maxD = Math.max(...distances);
+    const minE = Math.min(...elevations);
+    const maxE = Math.max(...elevations);
+    const distRange = Math.max(0.01, maxD - minD);
+    const elevRange = Math.max(1, maxE - minE);
+
+    const pointsStr = sampled.map(point => {
+      const x = ((Number(point.d) - minD) / distRange) * 100;
+      const y = 40 - (((Number(point.e) - minE) / elevRange) * 40);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' L');
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40" preserveAspectRatio="none"><defs><linearGradient id="elevationGradient" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#FF9849" stop-opacity="0.4" /><stop offset="100%" stop-color="#FF9849" stop-opacity="0.05" /></linearGradient></defs><path d="M${pointsStr} L100,40 L0,40 Z" fill="url(#elevationGradient)" stroke="none" /><path d="M${pointsStr}" fill="none" stroke="#FF9849" stroke-width="1.5" /></svg>`;
+    return svgToDataUri(svg);
+  },
+
+  generateMockPoints(cp) {
+    if (Array.isArray(cp.rawPoints) && cp.rawPoints.length > 1) return cp.rawPoints;
+
+    const pts = [];
+    const segDist = Math.max(0.01, Number(cp.segDist) || 0.01);
+    const steps = Math.max(24, Math.min(120, Math.round(segDist * 10)));
+    const startDist = Number(cp.accDist || 0) - segDist;
+    const distStep = segDist / steps;
+    const startEle = Number.isFinite(cp.startEle) ? cp.startEle : Math.round(cp.tempEle || 0);
+    const endEle = Number.isFinite(cp.endEle) ? cp.endEle : startEle;
+    const eleDiff = endEle - startEle;
+    const segGain = Number(cp.segGain) || Math.max(0, eleDiff);
+    const segLoss = Number(cp.segLoss) || Math.max(0, -eleDiff);
+    const waveAmplitude = Math.max(segGain, segLoss, Math.abs(eleDiff)) * 0.18;
+
+    for (let i = 0; i <= steps; i++) {
+      const progress = i / steps;
+      const d = startDist + (distStep * i);
+      const baseEle = startEle + (eleDiff * progress);
+      const undulation = Math.sin(progress * Math.PI * 2) * waveAmplitude * (1 - Math.abs((progress * 2) - 1) * 0.35);
+      const shoulder = Math.sin(progress * Math.PI) * Math.max(segGain - segLoss, 0) * 0.08;
+      const e = Math.max(0, baseEle + undulation + shoulder);
       pts.push({ d: parseFloat(d.toFixed(2)), e: Math.round(e) });
     }
+
+    if (pts.length >= 2 && pts[pts.length - 1].d <= pts[0].d) {
+      pts[pts.length - 1].d = parseFloat((pts[0].d + 0.01).toFixed(2));
+    }
+
     return pts;
+  },
+
+  getGradeAngleAtIndex(points = [], index = 0, sampleMeters = 120) {
+    if (!Array.isArray(points) || points.length < 2) return 0;
+    const safeIndex = clamp(index, 0, points.length - 1);
+    const current = points[safeIndex];
+    if (!current) return 0;
+
+    const halfWindowKm = Math.max(0.02, sampleMeters / 2000);
+    let leftIndex = safeIndex;
+    let rightIndex = safeIndex;
+
+    while (leftIndex > 0 && ((Number(current.d) - Number(points[leftIndex].d)) < halfWindowKm)) {
+      leftIndex--;
+    }
+    while (rightIndex < points.length - 1 && ((Number(points[rightIndex].d) - Number(current.d)) < halfWindowKm)) {
+      rightIndex++;
+    }
+
+    if (leftIndex === rightIndex) {
+      if (safeIndex > 0) leftIndex = safeIndex - 1;
+      if (safeIndex < points.length - 1) rightIndex = safeIndex + 1;
+    }
+
+    const left = points[leftIndex];
+    const right = points[rightIndex];
+    const distMeters = Math.max(1, (Number(right.d) - Number(left.d)) * 1000);
+    const elevDiff = Number(right.e) - Number(left.e);
+    const angle = Math.atan(elevDiff / distMeters) * (180 / Math.PI);
+    return Number.isFinite(angle) ? angle : 0;
+  },
+
+  formatGradeAngle(value = 0) {
+    if (!Number.isFinite(value)) return '--';
+    const rounded = Math.round(value * 10) / 10;
+    const sign = rounded > 0 ? '+' : '';
+    return `${sign}${rounded.toFixed(1)}°`;
+  },
+
+  getGradeColor(value = 0) {
+    const absAngle = Math.abs(Number(value) || 0);
+    if (absAngle <= 5) return '#5CF947';
+    if (absAngle <= 15) return '#FF9811';
+    if (absAngle <= 25) return '#F94747';
+    return '#8B0000';
+  },
+
+  getGradeColorByBucket(bucket = '') {
+    if (bucket === 'easy') return '#5CF947';
+    if (bucket === 'moderate') return '#FF9811';
+    if (bucket === 'steep') return '#F94747';
+    if (bucket === 'extreme') return '#8B0000';
+    return '#5CF947';
+  },
+
+  getGradeBucket(value = 0, previousBucket = '') {
+    const absAngle = Math.abs(Number(value) || 0);
+    const hysteresis = 1.2;
+    if (previousBucket === 'easy' && absAngle <= (5 + hysteresis)) return 'easy';
+    if (previousBucket === 'moderate') {
+      if (absAngle < (5 - hysteresis)) return 'easy';
+      if (absAngle <= (15 + hysteresis)) return 'moderate';
+    }
+    if (previousBucket === 'steep') {
+      if (absAngle < (15 - hysteresis)) {
+        return absAngle <= 5 ? 'easy' : 'moderate';
+      }
+      if (absAngle <= (25 + hysteresis)) return 'steep';
+    }
+    if (previousBucket === 'extreme' && absAngle >= (25 - hysteresis)) return 'extreme';
+
+    if (absAngle <= 5) return 'easy';
+    if (absAngle <= 15) return 'moderate';
+    if (absAngle <= 25) return 'steep';
+    return 'extreme';
+  },
+
+  getGradeOverlaySegments(points = [], options = {}) {
+    if (!Array.isArray(points) || points.length < 2) return [];
+    const pxPerKm = Math.max(1, Number(options.pxPerKm) || 1);
+    const minSegmentPx = Math.max(2, Number(options.minSegmentPx) || 2);
+    const sampleMeters = Math.max(30, Number(options.sampleMeters) || 90);
+    const rawSegments = [];
+    let previousBucket = '';
+    for (let i = 1; i < points.length; i++) {
+      const start = points[i - 1];
+      const end = points[i];
+      const angle = this.getGradeAngleAtIndex(points, i, sampleMeters);
+      const distKm = Math.max(0.001, Number(end.d) - Number(start.d));
+      const bucket = this.getGradeBucket(angle, previousBucket);
+      previousBucket = bucket;
+      rawSegments.push({
+        startIndex: i - 1,
+        endIndex: i,
+        start,
+        end,
+        angle,
+        bucket,
+        distKm
+      });
+    }
+    if (rawSegments.length === 0) return [];
+
+    const merged = [];
+    const updateMergedSegment = (target, addition, mode = 'append') => {
+      const combinedDist = target.distKm + addition.distKm;
+      if (mode === 'append') {
+        target.endIndex = addition.endIndex;
+        target.end = addition.end;
+      } else {
+        target.startIndex = addition.startIndex;
+        target.start = addition.start;
+      }
+      target.angle = ((target.angle * target.distKm) + (addition.angle * addition.distKm)) / Math.max(0.001, combinedDist);
+      target.distKm = combinedDist;
+    };
+    rawSegments.forEach((segment) => {
+      const prev = merged[merged.length - 1];
+      if (prev && prev.bucket === segment.bucket) {
+        updateMergedSegment(prev, segment, 'append');
+        return;
+      }
+      merged.push({ ...segment });
+    });
+
+    const getSegmentWidthPx = segment => Math.max(0.5, (segment.distKm || 0) * pxPerKm);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let i = 0; i < merged.length; i++) {
+        const segment = merged[i];
+        if (getSegmentWidthPx(segment) >= minSegmentPx) continue;
+
+        const prev = merged[i - 1];
+        const next = merged[i + 1];
+
+        if (prev && next && prev.bucket === next.bucket) {
+          updateMergedSegment(prev, segment, 'append');
+          updateMergedSegment(prev, next, 'append');
+          merged.splice(i, 2);
+          changed = true;
+          break;
+        }
+
+        if (prev && next) {
+          const target = getSegmentWidthPx(prev) >= getSegmentWidthPx(next) ? prev : next;
+          if (target === prev) {
+            updateMergedSegment(prev, segment, 'append');
+          } else {
+            updateMergedSegment(next, segment, 'prepend');
+          }
+          merged.splice(i, 1);
+          changed = true;
+          break;
+        }
+
+        if (prev) {
+          updateMergedSegment(prev, segment, 'append');
+          merged.splice(i, 1);
+          changed = true;
+          break;
+        }
+
+        if (next) {
+          updateMergedSegment(next, segment, 'prepend');
+          merged.splice(i, 1);
+          changed = true;
+          break;
+        }
+      }
+    }
+
+    return merged;
+  },
+
+  traceElevationLinePath(ctx, points, getX, getY) {
+    if (!Array.isArray(points) || points.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(getX(points[0].d), getY(points[0].e));
+    points.slice(1).forEach((point) => {
+      ctx.lineTo(getX(point.d), getY(point.e));
+    });
+  },
+
+  traceElevationFillPath(ctx, points, getX, getY, bottomY) {
+    if (!Array.isArray(points) || points.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(getX(points[0].d), bottomY);
+    points.forEach((point) => {
+      ctx.lineTo(getX(point.d), getY(point.e));
+    });
+    ctx.lineTo(getX(points[points.length - 1].d), bottomY);
+    ctx.closePath();
   },
 
   drawChartBase(touchX) {
     if (!this.currentChart) return;
     const { ctx, width, height, points } = this.currentChart;
+    if (!Array.isArray(points) || points.length < 2) return;
+    const showGrade = !!this.data.detailGradeMode;
 
     const padding = { top: 20, bottom: 20, left: 0, right: 0 };
     const drawW = width;
@@ -200,18 +1001,22 @@ Page({
     let minD = points[0].d, maxD = points[points.length-1].d;
     let minE = Math.min(...points.map(p => p.e));
     let maxE = Math.max(...points.map(p => p.e));
+    const distRange = Math.max(0.01, maxD - minD);
     
-    minE = Math.max(0, Math.floor(minE / 100) * 100);
-    maxE = Math.ceil(maxE / 100) * 100;
-    if (maxE === minE) maxE += 100;
+    const baseRange = Math.max(1, maxE - minE);
+    const elevPadding = Math.max(8, baseRange * 0.18);
+    minE = Math.max(0, minE - elevPadding);
+    maxE = maxE + elevPadding;
+    if (maxE <= minE) maxE = minE + 20;
 
-    const getX = (d) => ((d - minD) / (maxD - minD)) * drawW;
+    const getX = (d) => ((d - minD) / distRange) * drawW;
     const getY = (e) => padding.top + drawH - ((e - minE) / (maxE - minE)) * drawH;
 
     ctx.lineWidth = 1;
     ctx.font = '10px sans-serif';
 
-    const yStep = maxE - minE > 500 ? 200 : 100;
+    const visibleRange = maxE - minE;
+    const yStep = visibleRange > 800 ? 200 : (visibleRange > 300 ? 100 : 50);
     for(let ele = minE; ele <= maxE; ele += yStep) {
       let py = getY(ele);
       ctx.beginPath();
@@ -223,7 +1028,7 @@ Page({
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
       ctx.textAlign = 'right'; 
       ctx.textBaseline = 'middle'; 
-      ctx.fillText(ele, width - 4, py);
+      ctx.fillText(Math.round(ele), width - 4, py);
     }
 
     ctx.textAlign = 'center';
@@ -240,37 +1045,77 @@ Page({
       ctx.fillText(d, px, height - padding.bottom + 4);
     }
 
-    ctx.beginPath();
-    ctx.moveTo(getX(points[0].d), getY(points[0].e));
-    points.forEach(p => ctx.lineTo(getX(p.d), getY(p.e)));
-    const grd = ctx.createLinearGradient(0, padding.top, 0, height - padding.bottom);
-    grd.addColorStop(0, 'rgba(255, 170, 22, 0.4)');
-    grd.addColorStop(1, 'rgba(255, 170, 22, 0.0)');
-    ctx.lineTo(getX(points[points.length-1].d), height - padding.bottom);
-    ctx.lineTo(getX(points[0].d), height - padding.bottom);
-    ctx.fillStyle = grd;
-    ctx.fill();
+    if (showGrade) {
+      const overlaySegments = this.getGradeOverlaySegments(points, {
+        pxPerKm: drawW / distRange,
+        sampleMeters: 90,
+        minSegmentPx: 2
+      });
+      overlaySegments.forEach(({ startIndex, endIndex, angle, bucket }) => {
+        const color = this.getGradeColorByBucket(bucket || this.getGradeBucket(angle));
+        const segmentPoints = points.slice(startIndex, endIndex + 1);
+        if (segmentPoints.length < 2) return;
+        const firstPoint = segmentPoints[0];
+        const lastPoint = segmentPoints[segmentPoints.length - 1];
 
-    ctx.beginPath();
-    ctx.moveTo(getX(points[0].d), getY(points[0].e));
-    points.forEach(p => ctx.lineTo(getX(p.d), getY(p.e)));
-    ctx.strokeStyle = '#FFAA16';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(getX(firstPoint.d), height - padding.bottom);
+        segmentPoints.forEach((point) => {
+          ctx.lineTo(getX(point.d), getY(point.e));
+        });
+        ctx.lineTo(getX(lastPoint.d), height - padding.bottom);
+        ctx.closePath();
+        const segmentGradient = ctx.createLinearGradient(0, padding.top, 0, height - padding.bottom);
+        segmentGradient.addColorStop(0, hexToRgba(color, 0.20));
+        segmentGradient.addColorStop(1, hexToRgba(color, 0.05));
+        ctx.fillStyle = segmentGradient;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(getX(firstPoint.d), getY(firstPoint.e));
+        segmentPoints.slice(1).forEach((point) => {
+          ctx.lineTo(getX(point.d), getY(point.e));
+        });
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.4;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'butt';
+        ctx.stroke();
+      });
+    } else {
+      this.traceElevationFillPath(ctx, points, getX, getY, height - padding.bottom);
+      const grd = ctx.createLinearGradient(0, padding.top, 0, height - padding.bottom);
+      grd.addColorStop(0, 'rgba(255, 170, 22, 0.4)');
+      grd.addColorStop(1, 'rgba(255, 170, 22, 0.0)');
+      ctx.fillStyle = grd;
+      ctx.fill();
+
+      this.traceElevationLinePath(ctx, points, getX, getY);
+      ctx.strokeStyle = '#FFAA16';
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
 
     if (touchX !== null && touchX >= 0 && touchX <= width) {
       let closestPoint = points[0];
+      let closestIndex = 0;
       let minDiff = Infinity;
-      points.forEach(p => {
+      points.forEach((p, index) => {
         let px = getX(p.d);
         if (Math.abs(px - touchX) < minDiff) {
           minDiff = Math.abs(px - touchX);
           closestPoint = p;
+          closestIndex = index;
         }
       });
 
       let focusX = getX(closestPoint.d);
       let focusY = getY(closestPoint.e);
+      const focusGradeAngle = showGrade
+        ? this.getGradeAngleAtIndex(points, closestIndex, 90)
+        : this.getGradeAngleAtIndex(points, closestIndex);
 
       ctx.beginPath();
       ctx.moveTo(focusX, 0);
@@ -283,12 +1128,12 @@ Page({
       ctx.arc(focusX, focusY, 4, 0, 2 * Math.PI);
       ctx.fillStyle = '#FFFFFF';
       ctx.fill();
-      ctx.strokeStyle = '#FFAA16';
+      ctx.strokeStyle = showGrade ? this.getGradeColor(focusGradeAngle) : '#FFAA16';
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      const tipW = 86;
-      const tipH = 46; 
+      const tipW = showGrade ? 96 : 86;
+      const tipH = showGrade ? 62 : 46;
       let tipX = focusX - tipW / 2;
       let tipY = focusY - tipH - 12;
       
@@ -331,6 +1176,12 @@ Page({
       
       ctx.fillStyle = '#FFAA16';
       ctx.fillText(`${closestPoint.e}m`, tipX + tipW/2, tipY + 31);
+
+      if (showGrade) {
+        ctx.fillStyle = this.getGradeColor(focusGradeAngle);
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillText(this.formatGradeAngle(focusGradeAngle), tipX + tipW / 2, tipY + 48);
+      }
     }
   },
 
@@ -400,6 +1251,8 @@ Page({
         let groupColor = this.getGroupColor(data.groupDist);
 
         const availableTimes = data.availableStartTimes || [data.startTime || '07:00'];
+        const savedStrategySlider = Number(data.paceStrategySlider);
+        const savedEffortConfig = normalizeEffortConfig(data.effortConfig || {});
         this.setData({ 
           raceId: data.raceId || '',
           raceDate: data.raceDate || '',
@@ -411,7 +1264,9 @@ Page({
           availableStartTimes: availableTimes,
           targetHours: finalH,
           targetMinutes: finalM,
-          timeIndex: [finalH, finalM]
+          timeIndex: [finalH, finalM],
+          paceStrategySlider: Number.isFinite(savedStrategySlider) ? savedStrategySlider : DEFAULT_STRATEGY_SLIDER,
+          effortConfig: savedEffortConfig
         });
         this.initData(data.checkpoints);
         this.setUnsavedChanges(true); 
@@ -436,6 +1291,8 @@ Page({
               pureName = pureName.replace(` - ${planData.groupDist}`, '').replace(planData.groupDist, '').trim();
             }
             let groupColor = this.getGroupColor(planData.groupDist);
+            const savedEffortConfig = normalizeEffortConfig(planData.effortConfig || {});
+            const savedStrategySlider = Number(planData.paceStrategySlider);
 
             this.setData({
               raceId: planData.raceId || '',
@@ -450,7 +1307,9 @@ Page({
               targetMinutes: planData.targetMinutes,
               timeIndex: [planData.targetHours, planData.targetMinutes],
               nutritionVal: dbNutritionVal,
-              nutritionIndex: dbNutritionIndex
+              nutritionIndex: dbNutritionIndex,
+              paceStrategySlider: Number.isFinite(savedStrategySlider) ? savedStrategySlider : DEFAULT_STRATEGY_SLIDER,
+              effortConfig: savedEffortConfig
             });
             
             this.initData(planData.checkpoints);
@@ -515,16 +1374,21 @@ Page({
       const segDist = i === 0 ? 0 : parseFloat((cp.accDist - arr[i-1].accDist).toFixed(2));
       const segGain = i === 0 ? 0 : Math.max(0, cp.accGain - arr[i-1].accGain);
       const segLoss = i === 0 ? 0 : Math.max(0, (cp.accLoss || 0) - (arr[i-1].accLoss || 0));
-      const isDropBag = (cp.name || '').toUpperCase().includes('DP') || (cp.name || '').includes('换装');
+      const explicitCpNum = String(cp.cpNum || '').trim();
+      const explicitLocName = String(cp.locName || '').trim();
+      const isDropBag = cp.isDropBag === true || (cp.name || '').toUpperCase().includes('DP') || (cp.name || '').includes('换装');
       let defaultRest = (i === 0 || i === arr.length - 1) ? 0 : (isDropBag ? 30 : this.data.globalRestMins);
-      
-      let cpNum = i === 0 ? '起点' : (i === arr.length - 1 ? '终点' : `CP${i}`);
-      let locName = cp.name || '';
-      
+
+      let cpNum = explicitCpNum || (i === 0 ? '起点' : (i === arr.length - 1 ? '终点' : `CP${i}`));
+      let locName = explicitLocName || cp.name || '';
+      const startEle = i > 0 ? Math.round(arr[i-1].tempEle || 0) : Math.round(cp.tempEle || 0) || 0;
+      const endEle = Math.round(cp.tempEle || 0);
+
       let segCutoffMins = null;
       let cutoffTime = cp.cutoffTime || '';
+      let absoluteCutoffMinsPreset = Number.isFinite(cp.absoluteCutoffMinsPreset) ? cp.absoluteCutoffMinsPreset : null;
 
-      if (locName.includes('-')) {
+      if ((!explicitCpNum || !explicitLocName) && locName.includes('-')) {
         let parts = locName.split('-');
         cpNum = parts[0] || cpNum;
         let lastPart = parts[parts.length - 1].trim();
@@ -537,11 +1401,22 @@ Page({
         } else {
           locName = parts.slice(1).join('-');
         }
-      } else if (locName.includes('～')) {
+      } else if ((!explicitCpNum || !explicitLocName) && locName.includes('～')) {
         let parts = locName.split('～');
         cpNum = parts[0] || cpNum;
         locName = parts[1] || '';
       }
+
+      const fallbackRawPoints = this.generateMockPoints({
+        ...cp,
+        segDist,
+        segGain,
+        segLoss,
+        startEle,
+        endEle
+      });
+      const rawPoints = Array.isArray(cp.rawPoints) && cp.rawPoints.length > 1 ? cp.rawPoints : fallbackRawPoints;
+      const svgProfile = cp.svgProfile || this.buildInlineSvgProfile(rawPoints);
 
       return { 
         ...cp, 
@@ -551,45 +1426,133 @@ Page({
         segDist, 
         segGain, 
         segLoss, 
+        svgProfile,
+        rawPoints,
         rest: defaultRest, 
         moveMins: 0,
-        startEle: i > 0 ? Math.round(arr[i-1].tempEle || 0) : 0,
-        endEle: Math.round(cp.tempEle || 0),
+        startEle,
+        endEle,
         segCutoffMins: segCutoffMins, 
         cutoffTime: cutoffTime,
+        cutoffDateText: cp.cutoffDateText || '',
+        absoluteCutoffMinsPreset: absoluteCutoffMinsPreset,
         memo: cp.memo || ''
       };
     });
     this.setData({ checkpoints: cps }, () => { this.runFatigueEngine(); });
   },
 
+  applyAdvancedPacingModel(baseMoveMins, checkpoints, movingMins, startMins) {
+    const effortConfig = normalizeEffortConfig(this.data.effortConfig);
+    const hasAdvancedGroups =
+      effortConfig.base.runHikeThresholdEnabled ||
+      effortConfig.physiology.altitudePenaltyEnabled ||
+      effortConfig.physiology.nightPenaltyEnabled ||
+      effortConfig.terrain.uphillSkillEnabled ||
+      effortConfig.terrain.downhillSkillEnabled;
+
+    if (!hasAdvancedGroups) {
+      return baseMoveMins;
+    }
+
+    const totalDist = Number(checkpoints[checkpoints.length - 1]?.accDist) || checkpoints.reduce((sum, cp) => sum + (Number(cp.segDist) || 0), 0);
+    const baseArrivals = this.estimateArrivalTimes(checkpoints, baseMoveMins, startMins);
+
+    const weights = baseMoveMins.map((baseMove, index) => {
+      if (index === 0) return 0;
+
+      const cp = checkpoints[index];
+      const segDist = Math.max(0.01, Number(cp.segDist) || 0.01);
+      const segGain = Math.max(0, Number(cp.segGain) || 0);
+      const segLoss = Math.max(0, Number(cp.segLoss) || 0);
+      const avgGrade = segGain / (segDist * 10);
+      const avgEle = ((Number(cp.startEle) || 0) + (Number(cp.endEle) || 0)) / 2;
+      const totalVertical = Math.max(1, segGain + segLoss);
+      const uphillShare = segGain / totalVertical;
+      const downhillShare = segLoss / totalVertical;
+      const arrivalHour = Number.isFinite(baseArrivals[index]) ? (((Math.floor(baseArrivals[index] / 60) % 24) + 24) % 24) : null;
+      const runHikeThreshold = effortConfig.base.runHikeThresholdEnabled ? (Number(effortConfig.base.runHikeThreshold) || 12) : 12;
+      const altitudeThreshold = effortConfig.physiology.altitudeThresholdEnabled ? (Number(effortConfig.physiology.altitudeThreshold) || 1800) : 1800;
+      const altitudePenalty = effortConfig.physiology.altitudePenaltyEnabled ? (Number(effortConfig.physiology.altitudePenalty) || 0) : 0;
+      const nightPenalty = effortConfig.physiology.nightPenaltyEnabled ? (Number(effortConfig.physiology.nightPenalty) || 0) : 0;
+      const nightStartHour = clamp(Number(effortConfig.physiology.nightStartHour), 0, 23);
+      const nightEndHour = clamp(Number(effortConfig.physiology.nightEndHour), 0, 23);
+      const uphillSkill = effortConfig.terrain.uphillSkillEnabled ? (Number(effortConfig.terrain.uphillSkill) || 100) : 100;
+      const downhillSkill = effortConfig.terrain.downhillSkillEnabled ? (Number(effortConfig.terrain.downhillSkill) || 100) : 100;
+
+      let factor = 1;
+
+      if (effortConfig.base.runHikeThresholdEnabled) {
+        const hikeExcess = Math.max(0, avgGrade - runHikeThreshold);
+        factor *= 1 + clamp(hikeExcess * 0.012, 0, 0.22);
+      }
+
+      if (altitudePenalty > 0 && avgEle > altitudeThreshold) {
+        factor *= 1 + ((((avgEle - altitudeThreshold) / 1000) * altitudePenalty) / 100);
+      }
+
+      if (nightPenalty > 0 && this.isHourWithinWindow(arrivalHour, nightStartHour, nightEndHour)) {
+        factor *= 1 + (nightPenalty / 100);
+      }
+      if (uphillSkill !== 100) {
+        factor *= 1 - (uphillShare * ((uphillSkill - 100) / 100) * 0.32);
+      }
+      if (downhillSkill !== 100) {
+        factor *= 1 - (downhillShare * ((downhillSkill - 100) / 100) * 0.28);
+      }
+
+      return Math.max(0.1, (Number(baseMove) || 0.1) * clamp(factor, 0.45, 1.9));
+    });
+
+    return this.distributeRoundedMinutes(weights, movingMins);
+  },
+
   runFatigueEngine() {
     const { targetHours, targetMinutes, checkpoints, K } = this.data;
     const targetMins = (parseInt(targetHours) || 0) * 60 + (parseInt(targetMinutes) || 0);
     let totalED = 0;
+    let activeSegments = 0;
     
     checkpoints.forEach(cp => {
       cp.segED = cp.segDist + (cp.segGain / 100); 
       totalED += cp.segED;
+      if ((Number(cp.segED) || 0) > 0) activeSegments += 1;
     });
     
     const totalRest = checkpoints.reduce((sum, cp) => sum + parseInt(cp.rest || 0), 0);
     const movingMins = targetMins - totalRest;
     if (movingMins <= 0) return;
 
-    const a = movingMins / Math.pow(totalED, K);
+    const strategyK = this.getStrategyKValue();
+    const curveK = Number.isFinite(strategyK) ? strategyK : (Number(K) || DEFAULT_CURVE_K);
+    const avgSegED = activeSegments > 0 ? (totalED / activeSegments) : totalED;
+    // Shift the curve origin slightly right so extreme K values don't over-amplify the first segment.
+    const curveAnchorED = Math.max(1, avgSegED * 0.85, totalED * 0.06);
+    const curveBase = Math.pow(curveAnchorED, curveK);
+    const curveSpan = Math.pow(totalED + curveAnchorED, curveK) - curveBase;
     let runningED = 0;
-    let runningAccumulatedMins = 0;
+    let previousExactMins = 0;
+    const baseMoveWeights = checkpoints.map(() => 0);
 
     checkpoints.forEach((cp, i) => {
-      if (i === 0) { cp.moveMins = 0; return; }
+      if (i === 0) { baseMoveWeights[i] = 0; return; }
       runningED += cp.segED;
-      
-      let exactMinsSoFar = a * Math.pow(runningED, K);
-      let roundedMinsSoFar = Math.round(exactMinsSoFar);
-      
-      cp.moveMins = roundedMinsSoFar - runningAccumulatedMins;
-      runningAccumulatedMins = roundedMinsSoFar;
+
+      const exactMinsSoFar = curveSpan > 0
+        ? movingMins * ((Math.pow(runningED + curveAnchorED, curveK) - curveBase) / curveSpan)
+        : (movingMins * (runningED / Math.max(0.01, totalED)));
+      baseMoveWeights[i] = Math.max(0.01, exactMinsSoFar - previousExactMins);
+      previousExactMins = exactMinsSoFar;
+    });
+
+    const smoothedBaseWeights = this.smoothStrategyBaseWeights(baseMoveWeights, checkpoints, curveK);
+    const baseMoveMins = this.distributeRoundedMinutes(smoothedBaseWeights, movingMins);
+
+    let [startH, startM] = (this.data.startTime || '07:00').split(':').map(Number);
+    const startMins = (startH * 60) + startM;
+    const finalMovePlan = this.applyAdvancedPacingModel(baseMoveMins, checkpoints, movingMins, startMins);
+    checkpoints.forEach((cp, index) => {
+      cp.moveMins = finalMovePlan[index] || 0;
     });
     
     this.setData({ checkpoints }, () => { this.updateTimesAndPaces(false); });
@@ -653,8 +1616,11 @@ Page({
       raceName: this.data.raceName || '',
       groupDist: this.data.groupDist || '',
       startTime: this.data.startTime || '07:00',
+      availableStartTimes: Array.isArray(this.data.availableStartTimes) ? [...this.data.availableStartTimes] : [],
       targetHours: this.data.targetHours,
       targetMinutes: this.data.targetMinutes,
+      paceStrategySlider: this.data.paceStrategySlider,
+      effortConfig: cloneEffortConfig(this.data.effortConfig),
       nutritionVal: this.data.nutritionVal, 
       nutritionIndex: this.data.nutritionIndex, 
       checkpoints: (Array.isArray(checkpoints) ? checkpoints : []).map(cp => ({ ...cp }))
@@ -696,7 +1662,7 @@ Page({
 
   updateTimesAndPaces(updateTotals = false) {
     let { checkpoints, startTime } = this.data;
-    let [startH, startM] = startTime.split(':').map(Number);
+    let [startH, startM] = String(startTime || '07:00').split(':').map(Number);
     let startMins = startH * 60 + startM;
     let currentMinutes = startMins;
     let totalMinsForGlobal = 0;
@@ -712,7 +1678,10 @@ Page({
         cp.depTime = this.formatTime(currentMinutes);
         cp.pace = "-'--\""; cp.eqPace = "-'--\""; cp.eqPaceShort = "-'--\""; cp.eqDist = "0.00";
         cp.isOvertime = false;
-        cp.displayCutoffTime = cp.cutoffTime || '--:--';
+        cp.absoluteCutoffMins = Number.isFinite(cp.absoluteCutoffMinsPreset) ? cp.absoluteCutoffMinsPreset : null;
+        cp.displayCutoffTime = Number.isFinite(cp.absoluteCutoffMins)
+          ? this.formatTime(cp.absoluteCutoffMins)
+          : (cp.cutoffTime || '--:--');
         return cp;
       }
 
@@ -720,7 +1689,13 @@ Page({
       cp.arrAbsoluteMins = currentMinutes;
       cp.arrTime = this.formatTime(currentMinutes); 
       
-      if (cp.segCutoffMins !== null && cp.segCutoffMins !== undefined) {
+      if (Number.isFinite(cp.absoluteCutoffMinsPreset)) {
+        cp.absoluteCutoffMins = cp.absoluteCutoffMinsPreset;
+        cp.displayCutoffTime = this.formatTime(cp.absoluteCutoffMinsPreset);
+        lastCutoffMins = cp.absoluteCutoffMinsPreset;
+        runningCutoffMins = cp.absoluteCutoffMinsPreset;
+      }
+      else if (cp.segCutoffMins !== null && cp.segCutoffMins !== undefined) {
         runningCutoffMins += cp.segCutoffMins;
         cp.absoluteCutoffMins = runningCutoffMins;
         cp.displayCutoffTime = this.formatTime(runningCutoffMins);
@@ -767,6 +1742,7 @@ Page({
       updatePayload.targetHours = Math.floor(totalMinsForGlobal / 60);
       updatePayload.targetMinutes = totalMinsForGlobal % 60;
     }
+    Object.assign(updatePayload, this.buildPaceStrategyVisual(newCps));
     const localPlanSnapshot = this.saveLocalPlanSnapshot(newCps);
     updatePayload.blePlanPayload = this.buildBlePlanPayload(localPlanSnapshot);
     this.setData(updatePayload);
@@ -777,12 +1753,16 @@ Page({
     if (!points || points.length === 0) return;
 
     let minD = points[0].d, maxD = points[points.length-1].d;
-    let minE = globalMinE;
-    let maxE = globalMaxE;
-    
-    if (maxE - minE < 100) { maxE += 50; minE = Math.max(0, minE - 50); }
+    let minE = Math.min(...points.map(p => p.e));
+    let maxE = Math.max(...points.map(p => p.e));
+    const distRange = Math.max(0.01, maxD - minD);
+    const baseRange = Math.max(1, maxE - minE);
+    const elevPadding = Math.max(8, baseRange * 0.18);
+    minE = Math.max(0, minE - elevPadding);
+    maxE = maxE + elevPadding;
+    if (maxE <= minE) maxE = minE + 20;
 
-    const getX = (d) => chartX + ((d - minD) / (maxD - minD)) * chartW;
+    const getX = (d) => chartX + ((d - minD) / distRange) * chartW;
     const getY = (e) => chartY + chartH - ((e - minE) / (maxE - minE)) * chartH;
 
     ctx.beginPath();
@@ -1073,7 +2053,8 @@ Page({
     const localPlanSnapshot = this.saveLocalPlanSnapshot(this.data.checkpoints);
     const {
       raceId, raceName, groupDist, raceDate,
-      startTime, targetHours, targetMinutes,
+      startTime, availableStartTimes, targetHours, targetMinutes,
+      paceStrategySlider, effortConfig,
       nutritionVal, nutritionIndex, checkpoints
     } = localPlanSnapshot;
 
@@ -1087,7 +2068,8 @@ Page({
 
     const planData = {
       raceId, raceName, groupDist, raceDate, raceDateMs,
-      startTime, targetHours, targetMinutes, 
+      startTime, availableStartTimes, targetHours, targetMinutes,
+      paceStrategySlider, effortConfig,
       nutritionVal, nutritionIndex,  
       checkpoints, updateTime: db.serverDate()
     };

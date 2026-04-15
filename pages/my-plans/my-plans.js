@@ -1,6 +1,11 @@
 // 页面：全部计划，显示未来/历史计划和删除入口
 const db = wx.cloud.database();
 
+function extractDistanceValue(raw = '') {
+  const match = String(raw || '').match(/\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : 0;
+}
+
 Page({
   data: {
     statusBarHeight: 20,
@@ -27,6 +32,15 @@ Page({
 
   goBack() {
     wx.navigateBack();
+  },
+
+  getGroupColor(distStr) {
+    const dist = extractDistanceValue(distStr);
+
+    if (dist < 30) return '#36E153';
+    if (dist < 60) return '#FF9811';
+    if (dist < 100) return '#3284FF';
+    return '#F94747';
   },
 
   switchTab(e) {
@@ -66,6 +80,7 @@ Page({
           let planItem = {
             ...p,
             pureRaceName: pureName,
+            groupColor: this.getGroupColor(p.groupDist),
             displayTime: p.targetHours ? `${p.targetHours}h ${p.targetMinutes}min` : '未制定计划',
             slideX: 0 
           };

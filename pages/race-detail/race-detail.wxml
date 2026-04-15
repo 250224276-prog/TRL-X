@@ -46,7 +46,7 @@
     
     <view class="key-data-card">
       <view class="data-row">
-        <text class="data-label">发枪批次</text>
+        <text class="data-label">发枪时间</text>
         <text class="data-value" style="color: #FF9811">{{raceInfo.groups[currentGroupIndex].displayStartTimesStr || raceInfo.groups[currentGroupIndex].startTime}}</text>
       </view>
       <view class="data-row">
@@ -58,7 +58,7 @@
         <text class="data-value" style="color: #F6573B">{{raceInfo.groups[currentGroupIndex].elevation}}</text>
       </view>
       <view class="data-row border-none">
-        <text class="data-label">关门时间</text>
+        <text class="data-label">关门时长</text>
         <text class="data-value" style="color: #3582FF">{{raceInfo.groups[currentGroupIndex].cutoffTime}}</text>
       </view>
     </view>
@@ -83,7 +83,7 @@
       </view>
     </view>
 
-    <text class="section-title" style="margin-top: 50rpx;">发枪批次</text>
+    <text class="section-title" style="margin-top: 50rpx;">发枪时间</text>
     
     <view class="capsule-container">
       <view class="capsule-slider-bg" style="{{ 'width: ' + (100 / (raceInfo.groups[currentGroupIndex].startTimes.length || 1)) + '%; transform: translateX(' + (selectedStartTimeIndex * 100) + '%);' }}"></view>

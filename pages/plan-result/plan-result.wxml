@@ -43,21 +43,228 @@
             </view>
           </view>
         </view>
+      </view>
 
-        <view class="list-header-container">
-          <view class="list-row-inner">
-            <view class="col-1"><text class="lh-text">地点</text></view>
-            <view class="col-2">
-              <text class="lh-main">计划用时(m)</text>
-              <text class="lh-sub">(平均等强)</text>
-            </view>
-            <view class="col-3">
-              <text class="lh-main">休息(m)</text>
-              <text class="lh-sub">(到达时间)</text>
-            </view>
-            <view class="col-4"><text class="lh-text">海拔图</text></view>
-            <view class="col-5"><text class="lh-text">赛道信息</text></view>
+      <view class="effort-toggle-row" bindtap="toggleEffortPanel">
+          <view class="effort-toggle-copy">
+            <text class="effort-toggle-title">Physiological & Effort Factors</text>
+            <text class="effort-toggle-sub">{{showEffortPanel ? '收起专业调参' : '展开专业调参'}}</text>
           </view>
+          <view class="effort-toggle-arrow {{showEffortPanel ? 'expanded' : ''}}"></view>
+        </view>
+
+      <view class="effort-panel" wx:if="{{showEffortPanel}}">
+        <view class="strategy-card">
+          <view class="strategy-head">
+            <view>
+              <view class="strategy-title-row">
+                <text class="strategy-title">配速策略</text>
+                <view class="factor-help-btn strategy-help-btn" bindtap="showStrategyHelp">
+                  <text>?</text>
+                </view>
+              </view>
+              <text class="strategy-sub">{{strategyModeLabel}} · {{strategyModeDetail}}</text>
+            </view>
+            <view class="strategy-reset" bindtap="resetPaceStrategy">重置</view>
+          </view>
+
+          <view class="strategy-metrics">
+            <view class="strategy-metric">
+              <view class="strategy-metric-main">
+                <text class="strategy-metric-value strategy-metric-fast">{{strategyFastestPace}}</text>
+              </view>
+              <text class="strategy-metric-label">最快等强配速</text>
+            </view>
+            <view class="strategy-metric-divider"></view>
+            <view class="strategy-metric">
+              <view class="strategy-metric-main">
+                <text class="strategy-metric-value strategy-metric-slow">{{strategySlowestPace}}</text>
+              </view>
+              <text class="strategy-metric-label">最慢等强配速</text>
+            </view>
+          </view>
+
+          <view class="strategy-chart-wrap">
+            <image class="strategy-chart-img" wx:if="{{paceStrategyChartSvg}}" src="{{paceStrategyChartSvg}}" mode="widthFix"></image>
+          </view>
+
+          <view class="strategy-slider-wrap">
+            <slider min="0" max="100" step="1" value="{{paceStrategySlider}}" activeColor="#FFFFFF" backgroundColor="rgba(255,255,255,0.12)" block-color="#FFFFFF" block-size="18" bindchanging="onStrategySliderChanging" bindchange="onStrategySliderChange" />
+            <view class="strategy-slider-labels">
+              <text>前快后慢(K+)</text>
+              <text>全程匀速(K=1)</text>
+              <text>前慢后快(K-)</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="factor-group-card">
+          <view class="factor-group-head">
+            <view class="factor-group-copy">
+              <text class="factor-group-title">Base</text>
+              <text class="factor-group-sub">跑走阈值</text>
+            </view>
+          </view>
+          <view class="factor-group-body">
+            <view class="factor-row {{effortConfig.base.runHikeThresholdEnabled ? '' : 'factor-row-inactive'}}">
+              <view class="factor-row-head">
+                <view class="factor-row-title">
+                  <text class="factor-label">跑走切换阈值</text>
+                  <view class="factor-help-btn" data-group="base" data-field="runHikeThreshold" bindtap="showFactorHelp">
+                    <text>?</text>
+                  </view>
+                </view>
+                <view class="factor-row-actions">
+                  <text class="factor-value">{{effortConfig.base.runHikeThreshold}}%</text>
+                  <switch class="factor-switch" color="#FF9811" checked="{{effortConfig.base.runHikeThresholdEnabled}}" data-group="base" data-field="runHikeThreshold" bindchange="onEffortSwitch" />
+                </view>
+              </view>
+              <slider min="5" max="20" step="1" value="{{effortConfig.base.runHikeThreshold}}" disabled="{{!effortConfig.base.runHikeThresholdEnabled}}" activeColor="#FF9811" backgroundColor="rgba(255,255,255,0.12)" block-color="#FFFFFF" block-size="18" data-group="base" data-field="runHikeThreshold" bindchange="onEffortSliderChange" />
+              <text class="factor-hint">平均坡度高于这个阈值的路段，会更偏向 power hike 分配。</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="factor-group-card">
+          <view class="factor-group-head">
+            <view class="factor-group-copy">
+              <text class="factor-group-title">Physiology</text>
+              <text class="factor-group-sub">海拔、夜间</text>
+            </view>
+          </view>
+          <view class="factor-group-body">
+            <view class="factor-row {{effortConfig.physiology.altitudePenaltyEnabled ? '' : 'factor-row-inactive'}}">
+              <view class="factor-row-head">
+                <view class="factor-row-title">
+                  <text class="factor-label">高海拔影响</text>
+                </view>
+                <view class="factor-row-actions switch-only">
+                  <switch class="factor-switch" color="#FF9811" checked="{{effortConfig.physiology.altitudePenaltyEnabled}}" data-group="physiology" data-field="altitudePenalty" bindchange="onEffortSwitch" />
+                </view>
+              </view>
+              <view class="factor-pair-stack">
+                <view class="factor-sub-row">
+                  <view class="factor-sub-head">
+                    <view class="factor-sub-title">
+                      <text class="factor-sub-label">海拔阈值</text>
+                      <view class="factor-help-btn" data-group="physiology" data-field="altitudeThreshold" bindtap="showFactorHelp">
+                        <text>?</text>
+                      </view>
+                    </view>
+                    <text class="factor-sub-value">{{effortConfig.physiology.altitudeThreshold}}m</text>
+                  </view>
+                  <slider min="1000" max="3500" step="100" value="{{effortConfig.physiology.altitudeThreshold}}" disabled="{{!effortConfig.physiology.altitudePenaltyEnabled}}" activeColor="#FF9811" backgroundColor="rgba(255,255,255,0.12)" block-color="#FFFFFF" block-size="18" data-group="physiology" data-field="altitudeThreshold" bindchange="onEffortSliderChange" />
+                </view>
+                <view class="factor-sub-divider"></view>
+                <view class="factor-sub-row">
+                  <view class="factor-sub-head">
+                    <view class="factor-sub-title">
+                      <text class="factor-sub-label">高海拔惩罚</text>
+                      <view class="factor-help-btn" data-group="physiology" data-field="altitudePenalty" bindtap="showFactorHelp">
+                        <text>?</text>
+                      </view>
+                    </view>
+                    <text class="factor-sub-value">{{effortConfig.physiology.altitudePenalty}}%</text>
+                  </view>
+                  <slider min="0" max="20" step="1" value="{{effortConfig.physiology.altitudePenalty}}" disabled="{{!effortConfig.physiology.altitudePenaltyEnabled}}" activeColor="#FF9811" backgroundColor="rgba(255,255,255,0.12)" block-color="#FFFFFF" block-size="18" data-group="physiology" data-field="altitudePenalty" bindchange="onEffortSliderChange" />
+                </view>
+              </view>
+            </view>
+            <view class="factor-row {{effortConfig.physiology.nightPenaltyEnabled ? '' : 'factor-row-inactive'}}">
+              <view class="factor-row-head">
+                <view class="factor-row-title">
+                  <text class="factor-label">夜间惩罚</text>
+                  <view class="factor-help-btn" data-group="physiology" data-field="nightPenalty" bindtap="showFactorHelp">
+                    <text>?</text>
+                  </view>
+                </view>
+                <view class="factor-row-actions">
+                  <text class="factor-value">{{effortConfig.physiology.nightPenalty}}%</text>
+                  <switch class="factor-switch" color="#FF9811" checked="{{effortConfig.physiology.nightPenaltyEnabled}}" data-group="physiology" data-field="nightPenalty" bindchange="onEffortSwitch" />
+                </view>
+              </view>
+              <slider min="0" max="15" step="1" value="{{effortConfig.physiology.nightPenalty}}" disabled="{{!effortConfig.physiology.nightPenaltyEnabled}}" activeColor="#FF9811" backgroundColor="rgba(255,255,255,0.12)" block-color="#FFFFFF" block-size="18" data-group="physiology" data-field="nightPenalty" bindchange="onEffortSliderChange" />
+              <view class="factor-time-range">
+                <picker mode="selector" range="{{hourOptions}}" value="{{effortConfig.physiology.nightStartHour}}" disabled="{{!effortConfig.physiology.nightPenaltyEnabled}}" data-field="nightStartHour" bindchange="onNightWindowChange">
+                  <view class="factor-time-picker {{effortConfig.physiology.nightPenaltyEnabled ? '' : 'factor-time-picker-disabled'}}">
+                    <text class="factor-time-label">开始</text>
+                    <text class="factor-time-value">{{hourOptions[effortConfig.physiology.nightStartHour]}}</text>
+                  </view>
+                </picker>
+                <text class="factor-time-sep">至</text>
+                <picker mode="selector" range="{{hourOptions}}" value="{{effortConfig.physiology.nightEndHour}}" disabled="{{!effortConfig.physiology.nightPenaltyEnabled}}" data-field="nightEndHour" bindchange="onNightWindowChange">
+                  <view class="factor-time-picker {{effortConfig.physiology.nightPenaltyEnabled ? '' : 'factor-time-picker-disabled'}}">
+                    <text class="factor-time-label">结束</text>
+                    <text class="factor-time-value">{{hourOptions[effortConfig.physiology.nightEndHour]}}</text>
+                  </view>
+                </picker>
+              </view>
+              <text class="factor-hint">默认按 20:00 到次日 06:00 的夜间窗口处理。</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="factor-group-card">
+          <view class="factor-group-head">
+            <view class="factor-group-copy">
+              <text class="factor-group-title">Terrain Skill</text>
+              <text class="factor-group-sub">上坡能力、下坡能力</text>
+            </view>
+          </view>
+          <view class="factor-group-body">
+            <view class="factor-row {{effortConfig.terrain.uphillSkillEnabled ? '' : 'factor-row-inactive'}}">
+              <view class="factor-row-head">
+                <view class="factor-row-title">
+                  <text class="factor-label">上坡能力</text>
+                  <view class="factor-help-btn" data-group="terrain" data-field="uphillSkill" bindtap="showFactorHelp">
+                    <text>?</text>
+                  </view>
+                </view>
+                <view class="factor-row-actions">
+                  <text class="factor-value">{{effortConfig.terrain.uphillSkill}}%</text>
+                  <switch class="factor-switch" color="#FF9811" checked="{{effortConfig.terrain.uphillSkillEnabled}}" data-group="terrain" data-field="uphillSkill" bindchange="onEffortSwitch" />
+                </view>
+              </view>
+              <slider min="80" max="120" step="1" value="{{effortConfig.terrain.uphillSkill}}" disabled="{{!effortConfig.terrain.uphillSkillEnabled}}" activeColor="#FF9811" backgroundColor="rgba(255,255,255,0.12)" block-color="#FFFFFF" block-size="18" data-group="terrain" data-field="uphillSkill" bindchange="onEffortSliderChange" />
+            </view>
+            <view class="factor-row {{effortConfig.terrain.downhillSkillEnabled ? '' : 'factor-row-inactive'}}">
+              <view class="factor-row-head">
+                <view class="factor-row-title">
+                  <text class="factor-label">下坡能力</text>
+                  <view class="factor-help-btn" data-group="terrain" data-field="downhillSkill" bindtap="showFactorHelp">
+                    <text>?</text>
+                  </view>
+                </view>
+                <view class="factor-row-actions">
+                  <text class="factor-value">{{effortConfig.terrain.downhillSkill}}%</text>
+                  <switch class="factor-switch" color="#FF9811" checked="{{effortConfig.terrain.downhillSkillEnabled}}" data-group="terrain" data-field="downhillSkill" bindchange="onEffortSwitch" />
+                </view>
+              </view>
+              <slider min="80" max="120" step="1" value="{{effortConfig.terrain.downhillSkill}}" disabled="{{!effortConfig.terrain.downhillSkillEnabled}}" activeColor="#FF9811" backgroundColor="rgba(255,255,255,0.12)" block-color="#FFFFFF" block-size="18" data-group="terrain" data-field="downhillSkill" bindchange="onEffortSliderChange" />
+            </view>
+          </view>
+        </view>
+
+        <view class="effort-collapse-footer">
+          <view class="effort-collapse-btn" bindtap="toggleEffortPanel">
+            <text>收起</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="list-header-container">
+        <view class="list-row-inner">
+          <view class="col-1"><text class="lh-text">地点</text></view>
+          <view class="col-2">
+            <text class="lh-main">计划用时(m)</text>
+            <text class="lh-sub">(平均等强)</text>
+          </view>
+          <view class="col-3">
+            <text class="lh-main">休息(m)</text>
+            <text class="lh-sub">(到达时间)</text>
+          </view>
+          <view class="col-4"><text class="lh-text">海拔图</text></view>
+          <view class="col-5"><text class="lh-text">赛道信息</text></view>
         </view>
       </view>
 
@@ -130,8 +337,14 @@
       <swiper-item wx:for="{{checkpoints}}" wx:key="index" wx:if="{{index > 0}}">
         <scroll-view class="ds-scroll" scroll-y bindscroll="onScroll" bindtouchstart="onTouchStart" bindtouchend="onTouchEnd" data-type="scrollView">
           <view class="ds-title-row">
-            <text class="ds-cp-main">{{item.cpNum}}</text>
-            <text class="ds-cp-sub" wx:if="{{item.locName}}">{{item.locName}}</text>
+            <view class="ds-title-main">
+              <text class="ds-cp-main">{{item.cpNum}}</text>
+              <text class="ds-cp-sub" wx:if="{{item.locName}}">{{item.locName}}</text>
+            </view>
+            <view class="ds-title-meta">
+              <text class="ds-title-meta-lbl">关门时间</text>
+              <text class="ds-title-meta-val {{item.isOvertime ? 'text-red' : ''}}">{{item.displayCutoffTime || item.cutoffTime || '--:--'}}</text>
+            </view>
           </view>
           <view class="ds-title-divider"></view>
 
@@ -142,8 +355,9 @@
               <text class="ds-elev-down">↓{{item.segLoss}}m</text>
             </view>
             <view class="ds-stats-right">
-              <text class="ds-cutoff-lbl">关门时间</text>
-              <text class="ds-cutoff-val {{item.isOvertime ? 'text-red' : ''}}">{{item.displayCutoffTime || item.cutoffTime || '--:--'}}</text> 
+              <view class="ds-grade-toggle {{detailGradeMode ? 'active' : ''}}" bindtap="toggleDetailGradeMode">
+                <text>{{detailGradeMode ? '关闭坡度' : '显示坡度'}}</text>
+              </view>
             </view>
           </view>
 

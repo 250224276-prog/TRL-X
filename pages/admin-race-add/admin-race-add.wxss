@@ -113,6 +113,9 @@ page {
 .input-group.half {
   width: 47%;
 }
+.input-group.full {
+  width: 100%;
+}
 
 .label {
   font-size: 22rpx;
@@ -138,6 +141,15 @@ page {
 }
 .input-field:focus {
   border-color: #FF9811;
+}
+
+.location-field {
+  min-height: 112rpx;
+  height: auto;
+  padding-top: 18rpx;
+  padding-bottom: 18rpx;
+  line-height: 1.45;
+  align-items: flex-start;
 }
 
 .picker-field {
@@ -188,6 +200,31 @@ page {
 .gpx-txt.active {
   color: #FF9811;
   font-weight: 700;
+}
+
+.text-block {
+  margin-bottom: 30rpx;
+}
+
+.textarea-field {
+  width: 100%;
+  min-height: 260rpx;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 16rpx;
+  padding: 24rpx;
+  font-size: 26rpx;
+  color: #FFFFFF;
+  box-sizing: border-box;
+  border: 2rpx solid transparent;
+  line-height: 1.7;
+}
+
+.helper-text {
+  display: block;
+  margin-top: 14rpx;
+  font-size: 22rpx;
+  color: #888888;
+  line-height: 1.6;
 }
 
 .add-group-btn {

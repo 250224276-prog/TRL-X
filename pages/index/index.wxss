@@ -332,7 +332,9 @@ page {
   font-family: 'PingFang SC', sans-serif;
   font-size: 18rpx;
   color: rgba(255, 255, 255, 0.4);
-  text-align: right;  
+  text-align: right;
+  line-height: 1.35;
+  white-space: pre-line;
 }
 
 .tag-container {

@@ -1,6 +1,11 @@
 // 页面：全部比赛，显示赛事搜索、筛选和分组列表
 const db = wx.cloud.database();
 
+function extractDistanceValue(raw = '') {
+  const match = String(raw || '').match(/\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : 0;
+}
+
 Page({
   data: {
     statusBarHeight: 20,
@@ -36,12 +41,46 @@ Page({
     this.fetchCloudRaces();
   },
 
+  getGroupColor(distStr) {
+    const dist = extractDistanceValue(distStr);
+
+    if (dist < 30) return '#36E153';
+    if (dist < 60) return '#FF9811';
+    if (dist < 100) return '#3284FF';
+    return '#F94747';
+  },
+
+  normalizeRaceTags(race = {}) {
+    const sourceTags = Array.isArray(race.tags) && race.tags.length > 0
+      ? race.tags
+      : (Array.isArray(race.groups) ? race.groups.map(group => ({ dist: group.dist })) : []);
+
+    return sourceTags
+      .map(tag => {
+        const dist = String(tag.dist || tag.distance || tag.label || '').trim();
+        if (!dist) return null;
+        return {
+          ...tag,
+          dist,
+          color: this.getGroupColor(dist)
+        };
+      })
+      .filter(Boolean);
+  },
+
+  normalizeRaceListItem(race = {}) {
+    return {
+      ...race,
+      tags: this.normalizeRaceTags(race)
+    };
+  },
+
   fetchCloudRaces() {
     wx.showLoading({ title: '加载赛事中...', mask: true });
 
     db.collection('races').get({
       success: res => {
-        let races = res.data;
+        let races = res.data.map(race => this.normalizeRaceListItem(race));
         
         races.forEach(race => {
           race.timeMs = this.parseTime(race.date);

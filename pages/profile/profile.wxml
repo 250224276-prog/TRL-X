@@ -17,7 +17,7 @@
     <view class="arrow-right"></view>
   </view>
 
-  <view class="admin-portal" wx:if="{{isAdmin}}" bindtap="goToAdminPortal">
+  <view class="admin-portal" bindtap="goToAdminPortal">
     <view class="admin-left">
       <view class="admin-icon">👑</view>
       <view class="admin-text-box">

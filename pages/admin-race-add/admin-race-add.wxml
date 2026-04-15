@@ -6,14 +6,14 @@
         <text class="main-title">AST 控制台</text>
         <view class="history-btn" bindtap="goToRaceList" wx:if="{{mode === 'create'}}">历史赛事库</view>
       </view>
-      <text class="sub-title">多组别并发全自动上新系统</text>
+      <text class="sub-title">GPX 轨迹 + 文本站点 的简化录入模式</text>
     </view>
 
     <view class="section-header"><text>全局赛事档案</text></view>
     <view class="global-card">
       <view class="input-group">
         <text class="label">赛事名称 (必填)</text>
-        <input class="input-field" placeholder="例如：2026 莫干山越野赛" model:value="{{raceName}}" />
+        <input class="input-field" placeholder="例如：2026 莫干山越野赛" value="{{raceName}}" bindinput="onRaceNameInput" />
       </view>
       <view class="input-row">
         <view class="input-group half">
@@ -24,17 +24,17 @@
         </view>
         <view class="input-group half">
           <text class="label">举办地点</text>
-          <input class="input-field" placeholder="例如：浙江 湖州" model:value="{{location}}" />
+          <textarea class="input-field location-field" placeholder="例如：广东省深圳市罗湖区&#10;解放路和平茂业" value="{{location}}" bindinput="onLocationInput" auto-height="true" maxlength="-1"></textarea>
         </view>
       </view>
-      <view class="input-row" style="align-items: center;">
-        <view class="input-group half switch-group">
-          <text class="label" style="margin-bottom:0;">ITRA 认证</text>
-          <switch color="#FF9811" checked="{{hasItra}}" bindchange="onItraChange"/>
-        </view>
+      <view class="input-row">
         <view class="input-group half" bindtap="chooseCoverImg">
           <text class="label">赛事主封面</text>
           <view class="upload-btn {{coverImgPath ? 'uploaded' : ''}}">{{coverImgPath ? '✅ 已选择' : '+ 上传图片'}}</view>
+        </view>
+        <view class="input-group half switch-group">
+          <text class="label" style="margin-bottom:0;">ITRA 认证</text>
+          <switch color="#FF9811" checked="{{hasItra}}" bindchange="onItraChange"/>
         </view>
       </view>
     </view>
@@ -51,13 +51,9 @@
         </view>
 
         <view class="input-row">
-          <view class="input-group half">
-            <text class="label">简称(如: 50km，触发自动识色)</text>
+          <view class="input-group full">
+            <text class="label">简称(如: 50km，可与文本首行自动校验)</text>
             <input class="input-field" placeholder="输入距离" value="{{item.dist}}" bindinput="onGroupInput" data-index="{{index}}" data-field="dist" />
-          </view>
-          <view class="input-group half">
-            <text class="label">关门时间</text>
-            <input class="input-field" placeholder="如: 14小时" value="{{item.cutoffTime}}" bindinput="onGroupInput" data-index="{{index}}" data-field="cutoffTime" />
           </view>
         </view>
 
@@ -75,25 +71,23 @@
           </view>
         </view>
 
-        <view class="st-section">
-          <view class="st-header">
-            <text class="label">发枪时间 (支持多批次起跑)</text>
-            <view class="st-add-mini" bindtap="addStartTime" data-group-index="{{index}}">+ 加一批</view>
-          </view>
-          <view class="st-grid">
-            <block wx:for="{{item.startTimes}}" wx:for-item="st" wx:for-index="stIdx" wx:key="stIdx">
-              <view class="st-cell">
-                <picker mode="time" value="{{st}}" bindchange="onStartTimeChange" data-group-index="{{index}}" data-st-index="{{stIdx}}">
-                  <view class="picker-field active st-picker">{{st}}</view>
-                </picker>
-                <view class="st-del-btn" bindtap="removeStartTime" data-group-index="{{index}}" data-st-index="{{stIdx}}" wx:if="{{item.startTimes.length > 1}}">×</view>
-              </view>
-            </block>
-          </view>
+        <view class="text-block">
+          <text class="label">站点文本 (必填)</text>
+          <textarea
+            class="textarea-field"
+            placeholder="请按新协议粘贴，例如：&#10;组别距离：46&#10;发枪时间：4月11号07点00分, 07点30分&#10;关门时长：13小时&#10;爬升：2580m&#10;下降：2590m&#10;START-庾村广场-0km-0小时&#10;M1-裸心谷-10.1km--&#10;M4-碧坞-34.9km-10小时-换装点&#10;FINISH-郡安里-46.3km-13小时&#10;*注：本组别包含分批起跑，以上关门时长均以第一批起跑时间为基准计算。"
+            value="{{item.checkpointText}}"
+            bindinput="onGroupInput"
+            data-index="{{index}}"
+            data-field="checkpointText"
+            auto-height="true"
+            maxlength="-1"
+          ></textarea>
+          <text class="helper-text">前三行必须是：组别距离、发枪时间、关门时长。后面可选填“爬升：2580m”和“下降：2590m”，没有 GPX 时会先用于详情页关键数据。从站点行开始逐行填写站点；没有关门可写 `--`，换装点在行尾写 `-换装点`。</text>
         </view>
 
         <view class="gpx-box" bindtap="chooseGroupGpx" data-index="{{index}}">
-          <text class="gpx-txt {{item.gpxFilePath ? 'active' : ''}}">{{item.gpxFileName || '+ 点击载入此组别的 GPX 轨迹文件'}}</text>
+          <text class="gpx-txt {{item.gpxFilePath ? 'active' : ''}}">{{item.gpxFileName || '+ 可选：载入此组别的 GPX 轨迹文件'}}</text>
         </view>
       </view>
     </block>
