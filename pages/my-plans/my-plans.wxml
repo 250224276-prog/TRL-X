@@ -47,7 +47,7 @@
                         <text class="plan-name">{{item.pureRaceName || item.raceName}}</text>
                         <view class="plan-group-tag" wx:if="{{item.groupDist}}" style="color: {{item.groupColor}}; border-color: {{item.groupColor}};">{{item.groupDist}}</view>
                       </view>
-                      <text class="plan-date">{{item.raceDate}}</text>
+                      <text class="plan-date">{{item.planDate || item.raceDate}}</text>
                     </view>
                     <view class="plan-info-right">
                       <text class="plan-time">{{item.displayTime}}</text>

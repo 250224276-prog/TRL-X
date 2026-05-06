@@ -36,6 +36,10 @@ function parseDateTimeTextToMs(rawText, raceDate = '') {
   return new Date(parts.year, parts.month - 1, parts.day, Number(timeOnlyMatch[1]), Number(timeOnlyMatch[2]), 0, 0).getTime();
 }
 
+function getGroupBaseDate(group, raceDate = '') {
+  return String(group?.groupStartDate || raceDate || '').trim();
+}
+
 function getGroupCutoffHours(group, raceDate = '') {
   if (Number.isFinite(group?.cutoffDurationMins) && group.cutoffDurationMins > 0) {
     return group.cutoffDurationMins / 60;
@@ -45,8 +49,9 @@ function getGroupCutoffHours(group, raceDate = '') {
     ? group.startTimes[0]
     : group?.startTime;
 
-  const endMs = parseDateTimeTextToMs(group?.cutoffTime, raceDate);
-  const startMs = parseDateTimeTextToMs(startTime, raceDate);
+  const baseDate = getGroupBaseDate(group, raceDate);
+  const endMs = parseDateTimeTextToMs(group?.cutoffTime, baseDate);
+  const startMs = parseDateTimeTextToMs(startTime, baseDate);
   if (Number.isFinite(endMs) && Number.isFinite(startMs) && endMs > startMs) {
     return (endMs - startMs) / (60 * 60 * 1000);
   }
@@ -114,6 +119,7 @@ Page({
                 if (st.length === 0) st = ['07:00']; 
               }
               g.startTimes = st;
+              g.groupStartDate = g.groupStartDate || race.date || '';
               g.displayStartTimesStr = st.join(' / '); // 拼接用于关键数据展示
               return g;
             });
@@ -147,7 +153,7 @@ Page({
   // ✨ 新增引擎：根据关门时间智能推算安全完赛时间
   setDefaultTimeForGroup(groupIndex) {
     const group = this.data.raceInfo.groups[groupIndex];
-    const cutoffHours = getGroupCutoffHours(group, this.data.raceInfo?.date || '');
+    const cutoffHours = getGroupCutoffHours(group, getGroupBaseDate(group, this.data.raceInfo?.date || ''));
     if (!group || !Number.isFinite(cutoffHours) || cutoffHours <= 0) {
       this.setData({ targetHours: '', targetMinutes: '' });
       return;
@@ -185,6 +191,18 @@ Page({
   },
 
   goBack() { wx.navigateBack(); },
+
+  goToAiChat() {
+    const raceInfo = this.data.raceInfo;
+    if (!raceInfo || !raceInfo._id) {
+      wx.showToast({ title: '赛事资料尚未加载完成', icon: 'none' });
+      return;
+    }
+
+    wx.navigateTo({
+      url: `/pages/ai-chat/ai-chat?raceId=${raceInfo._id}&groupIndex=${this.data.currentGroupIndex}`
+    });
+  },
 
   hasGroupGpxTrack(group) {
     return Boolean(group && String(group.gpxFileID || '').trim());
@@ -276,6 +294,7 @@ Page({
       const draftData = {
         raceId: raceInfo._id,
         raceDate: raceInfo.date,
+        groupStartDate: getGroupBaseDate(currentGroup, raceInfo.date),
         groupDist: currentGroup.dist,
         name: `${raceInfo.name || 'AST越野赛'} - ${currentGroup.dist}`, 
         checkpoints: currentGroup.checkpoints,

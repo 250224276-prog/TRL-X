@@ -1,5 +1,27 @@
 // 页面：历史赛事库，显示赛事列表并提供编辑删除入口
 const db = wx.cloud.database();
+const app = getApp();
+
+function ensureAdminAccess() {
+  if (app.globalData && app.globalData.isLoggedIn && app.globalData.isAdmin) {
+    return true;
+  }
+
+  wx.showModal({
+    title: '无权限访问',
+    content: '请先登录指定管理员账号',
+    showCancel: false,
+    success: () => {
+      const pages = getCurrentPages();
+      if (pages.length > 1) {
+        wx.navigateBack();
+      } else {
+        wx.switchTab({ url: '/pages/profile/profile' });
+      }
+    }
+  });
+  return false;
+}
 
 Page({
   data: {
@@ -9,6 +31,7 @@ Page({
 
   // ✨ 只要页面显示，就去拉取最新数据（保证列表永远是最新的）
   onShow() {
+    if (!ensureAdminAccess()) return;
     this.fetchRaces();
   },
 

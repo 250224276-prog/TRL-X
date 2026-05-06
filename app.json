@@ -5,6 +5,7 @@
     "pages/race-detail/race-detail",
     "pages/race-list/race-list",
     "pages/ble-connect/ble-connect",
+    "pages/ai-chat/ai-chat",
     "pages/login/login",
     "pages/plan-result/plan-result",
     "pages/admin-race-add/admin-race-add",

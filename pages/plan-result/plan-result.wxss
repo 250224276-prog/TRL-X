@@ -3,14 +3,17 @@
 page { background: #000000; color: #FFFFFF; font-family: 'Inter', sans-serif; }
 .plan-page { width: 100vw; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-.top-nav { padding: 100rpx 40rpx 10rpx 40rpx; background: #000000; position: relative; z-index: 60; flex-shrink: 0; }
+.top-nav { padding: 100rpx 40rpx 10rpx 40rpx; background: #000000; position: relative; z-index: 60; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-start; }
 .back-btn { width: 40rpx; height: 40rpx; padding-bottom: 10rpx;}
 .arrow-left { width: 18rpx; height: 18rpx; border-left: 4rpx solid #FFF; border-bottom: 4rpx solid #FFF; transform: rotate(45deg); }
+.plan-ai-entry { min-width: 132rpx; height: 58rpx; padding: 0 22rpx; border-radius: 30rpx; display: flex; align-items: center; justify-content: center; background: rgba(255, 152, 17, 0.12); border: 2rpx solid rgba(255, 152, 17, 0.22); box-sizing: border-box; }
+.plan-ai-entry text { font-size: 24rpx; font-weight: 700; color: #FFB24A; }
 
 .plan-scroll { flex: 1; width: 100%; height: 0; }
 
 .scroll-top-section { padding: 10rpx 40rpx 20rpx 40rpx; }
 .title-group { display: flex; align-items: center; gap: 20rpx; margin-bottom: 10rpx; }
+.plan-top-actions { display: flex; justify-content: flex-end; margin-top: 8rpx; }
 .race-name { font-weight: 700; font-size: 46rpx; margin-bottom: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 500rpx; }
 .plan-group-tag { background: rgba(255, 255, 255, 0.08); border-radius: 16rpx; padding: 4rpx 14rpx; display: flex; align-items: center; justify-content: center; border: 2rpx solid transparent; font-family: 'Inter', sans-serif; font-size: 20rpx; font-weight: 700; line-height: 1.2; flex-shrink: 0; }
 
@@ -133,6 +136,53 @@ page { background: #000000; color: #FFFFFF; font-family: 'Inter', sans-serif; }
 .btn { width: 310rpx; height: 88rpx; border-radius: 44rpx; display: flex; align-items: center; justify-content: center; font-size: 30rpx; font-weight: 700; }
 .btn-save { background: rgba(255, 255, 255, 0.15); }
 .btn-sync { background: #FF9811; color: #000; }
+
+.plan-ai-mask { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.58); z-index: 170; backdrop-filter: blur(10px); }
+.plan-ai-sheet { position: fixed; left: 0; right: 0; bottom: 0; height: 74vh; background: linear-gradient(180deg, rgba(24,24,24,0.98), rgba(13,13,13,0.98)); border-radius: 44rpx 44rpx 0 0; z-index: 171; border-top: 2rpx solid rgba(255,255,255,0.08); display: flex; flex-direction: column; box-shadow: 0 -20rpx 70rpx rgba(0, 0, 0, 0.38); }
+.plan-ai-handle { width: 84rpx; height: 8rpx; border-radius: 999rpx; background: rgba(255,255,255,0.18); margin: 18rpx auto 12rpx; flex-shrink: 0; }
+.plan-ai-header { padding: 0 34rpx 20rpx; display: flex; align-items: flex-start; justify-content: space-between; gap: 24rpx; flex-shrink: 0; }
+.plan-ai-header-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10rpx; }
+.plan-ai-title { font-size: 34rpx; font-weight: 800; color: #FFFFFF; }
+.plan-ai-subtitle { font-size: 22rpx; line-height: 1.55; color: rgba(255,255,255,0.46); }
+.plan-ai-close { min-width: 96rpx; height: 54rpx; padding: 0 20rpx; border-radius: 27rpx; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.06); border: 2rpx solid rgba(255,255,255,0.08); box-sizing: border-box; }
+.plan-ai-close text { font-size: 22rpx; font-weight: 700; color: rgba(255,255,255,0.72); }
+.plan-ai-context-card { margin: 0 34rpx 16rpx; padding: 22rpx 24rpx; border-radius: 28rpx; background: rgba(255,255,255,0.04); border: 2rpx solid rgba(255,255,255,0.06); display: flex; flex-direction: column; gap: 8rpx; flex-shrink: 0; }
+.plan-ai-context-label { font-size: 20rpx; color: rgba(255,255,255,0.42); }
+.plan-ai-context-value { font-size: 28rpx; font-weight: 700; color: #FFFFFF; }
+.plan-ai-context-meta { font-size: 21rpx; color: rgba(255,255,255,0.48); line-height: 1.5; }
+.plan-ai-examples { padding: 0 34rpx 18rpx; display: flex; flex-wrap: wrap; gap: 14rpx; flex-shrink: 0; }
+.plan-ai-example-chip { max-width: 100%; padding: 14rpx 18rpx; border-radius: 24rpx; background: rgba(255,255,255,0.05); border: 2rpx solid rgba(255,255,255,0.08); box-sizing: border-box; }
+.plan-ai-example-chip text { font-size: 22rpx; line-height: 1.4; color: rgba(255,255,255,0.78); }
+.plan-ai-scroll { flex: 1; min-height: 0; width: 100%; }
+.plan-ai-message-list { padding: 6rpx 34rpx 24rpx; display: flex; flex-direction: column; gap: 18rpx; box-sizing: border-box; }
+.plan-ai-empty { margin: 24rpx 0 6rpx; padding: 28rpx 26rpx; border-radius: 28rpx; background: rgba(255,255,255,0.03); border: 2rpx dashed rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 12rpx; }
+.plan-ai-empty-title { font-size: 28rpx; font-weight: 700; color: #FFFFFF; }
+.plan-ai-empty-copy { font-size: 22rpx; line-height: 1.6; color: rgba(255,255,255,0.5); }
+.plan-ai-row { display: flex; width: 100%; }
+.plan-ai-row.from-user { justify-content: flex-end; }
+.plan-ai-row.from-ai { justify-content: flex-start; }
+.plan-ai-bubble { max-width: 82%; padding: 22rpx 24rpx; border-radius: 28rpx; box-sizing: border-box; }
+.plan-ai-bubble-user { background: rgba(255, 152, 17, 0.18); border: 2rpx solid rgba(255, 152, 17, 0.16); }
+.plan-ai-bubble-ai { background: rgba(255,255,255,0.05); border: 2rpx solid rgba(255,255,255,0.06); }
+.plan-ai-bubble-loading { display: flex; align-items: center; gap: 12rpx; }
+.plan-ai-message-text { font-size: 25rpx; line-height: 1.7; color: #FFFFFF; white-space: pre-wrap; word-break: break-word; }
+.plan-ai-loading-text { font-size: 24rpx; font-weight: 600; color: rgba(255,255,255,0.8); }
+.plan-ai-loading-dots { display: flex; align-items: center; gap: 8rpx; }
+.plan-ai-loading-dot { width: 10rpx; height: 10rpx; border-radius: 50%; background: #FFB24A; opacity: 0.3; animation: planAiDotPulse 1.2s ease-in-out infinite; }
+.plan-ai-loading-dot.dot-2 { animation-delay: 0.2s; }
+.plan-ai-loading-dot.dot-3 { animation-delay: 0.4s; }
+.plan-ai-composer { padding: 20rpx 34rpx calc(env(safe-area-inset-bottom) + 20rpx); display: flex; align-items: flex-end; gap: 16rpx; border-top: 2rpx solid rgba(255,255,255,0.06); background: rgba(10,10,10,0.92); backdrop-filter: blur(22px); flex-shrink: 0; }
+.plan-ai-input { flex: 1; min-height: 46rpx; max-height: 180rpx; padding: 18rpx 22rpx; border-radius: 28rpx; background: rgba(255,255,255,0.06); border: 2rpx solid rgba(255,255,255,0.08); font-size: 25rpx; line-height: 1.55; color: #FFFFFF; box-sizing: border-box; }
+.plan-ai-placeholder { color: rgba(255,255,255,0.34); }
+.plan-ai-send { width: 112rpx; height: 86rpx; border-radius: 26rpx; display: flex; align-items: center; justify-content: center; background: #FF9811; box-sizing: border-box; flex-shrink: 0; }
+.plan-ai-send text { font-size: 26rpx; font-weight: 800; color: #000000; }
+.plan-ai-send.disabled { background: rgba(255,255,255,0.08); }
+.plan-ai-send.disabled text { color: rgba(255,255,255,0.34); }
+
+@keyframes planAiDotPulse {
+  0%, 80%, 100% { opacity: 0.24; transform: scale(0.86); }
+  40% { opacity: 1; transform: scale(1); }
+}
 
 .modal-mask { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 100; backdrop-filter: blur(8px); }
 .detail-sheet { position: fixed; left: 0; right: 0; bottom: 0; height: 86vh; background: #1D1D1D; border-radius: 56rpx 56rpx 0 0; z-index: 101; transform: translateY(100%); transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1); display: flex; flex-direction: column; }

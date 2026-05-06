@@ -30,7 +30,6 @@
               data-name="{{item.name}}">
 
           <view class="device-info">
-            <view class="device-icon"></view>
             <view class="text-group">
               <text class="device-name">{{item.name}}</text>
               <text class="device-signal">信号: {{item.signal}} ({{item.rssi}}dBm)</text>

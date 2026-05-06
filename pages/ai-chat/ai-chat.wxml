@@ -1,0 +1,230 @@
+<view class="ai-page">
+  <view wx:if="{{showQuickActions}}" class="quick-actions-mask" bindtap="closeQuickActions"></view>
+  <view wx:if="{{showContextSheet}}" class="context-sheet-mask" bindtap="closeContextSheet"></view>
+
+  <view class="custom-nav">
+    <view class="nav-fade"></view>
+    <view class="nav-back" bindtap="goBack"></view>
+  </view>
+
+  <scroll-view
+    class="chat-scroll {{!messages.length && !loading ? 'is-empty' : ''}}"
+    scroll-y
+    scroll-with-animation
+    scroll-into-view="{{scrollIntoView}}"
+    enhanced
+    show-scrollbar="{{false}}"
+    bindtap="closeQuickActions"
+  >
+    <view class="message-list {{!messages.length && !loading ? 'message-list-empty' : ''}}" style="{{messageListStyle}}">
+      <view class="empty-state" wx:if="{{!messages.length && !loading}}">
+        <view class="empty-mark">
+          <image class="empty-logo" src="/images/LOGO.png" mode="aspectFit"></image>
+        </view>
+        <text class="empty-brand">TRL-X</text>
+        <text class="empty-intro">{{emptyStateDescription}}</text>
+      </view>
+
+      <block wx:for="{{messages}}" wx:key="id">
+        <view id="msg-{{item.id}}" class="message-row {{item.role === 'user' ? 'from-user' : 'from-ai'}}">
+          <view class="message-bubble">
+            <block wx:if="{{item.role === 'assistant'}}">
+              <view class="assistant-groups">
+                <block wx:for="{{item.groups}}" wx:key="id" wx:for-item="group">
+                  <view class="assistant-group assistant-group-{{group.level}}">
+                    <view
+                      wx:if="{{group.heading}}"
+                      class="assistant-group-heading-wrap assistant-group-heading-wrap-{{group.level}}"
+                    >
+                      <text
+                        wx:if="{{group.headingPrefix}}"
+                        class="assistant-group-heading-prefix assistant-group-heading-prefix-{{group.level}}"
+                        selectable="true"
+                      >{{group.headingPrefix}}</text>
+                      <text
+                        class="assistant-group-heading assistant-group-heading-{{group.level}}"
+                        selectable="true"
+                      >{{group.heading}}</text>
+                    </view>
+
+                    <block wx:for="{{group.items}}" wx:key="id" wx:for-item="block">
+                      <view class="assistant-group-item assistant-group-item-{{block.type}}">
+                        <block wx:if="{{block.type === 'bullet'}}">
+                          <text class="assistant-group-bullet-marker">•</text>
+                          <text class="assistant-group-content assistant-group-content-bullet" selectable="true">{{block.text}}</text>
+                        </block>
+                        <block wx:else>
+                          <text class="assistant-group-content assistant-group-content-{{block.type}}" selectable="true">{{block.text}}</text>
+                        </block>
+                      </view>
+                    </block>
+                  </view>
+                </block>
+              </view>
+            </block>
+            <block wx:else>
+              <block wx:for="{{item.blocks}}" wx:key="id" wx:for-item="block">
+                <view class="message-block message-block-{{block.type}}">
+                  <block wx:if="{{block.type === 'label'}}">
+                    <text class="message-block-label" selectable="true">{{block.label}}</text>
+                    <text class="message-block-body" selectable="true">{{block.text}}</text>
+                  </block>
+                  <block wx:else>
+                    <text class="message-content message-content-{{block.type}}" selectable="true">{{block.text}}</text>
+                  </block>
+                </view>
+              </block>
+            </block>
+          </view>
+        </view>
+      </block>
+
+      <view class="thinking-row" wx:if="{{loading}}">
+        <text class="thinking-label">正在思考</text>
+        <view class="thinking-dots">
+          <view class="thinking-dot thinking-dot-1"></view>
+          <view class="thinking-dot thinking-dot-2"></view>
+          <view class="thinking-dot thinking-dot-3"></view>
+        </view>
+      </view>
+
+      <view id="chat-bottom" class="chat-bottom-anchor"></view>
+    </view>
+  </scroll-view>
+
+  <view class="composer-wrap" style="{{composerWrapStyle}}">
+    <view class="composer-assets" wx:if="{{selectedContextLabel || selectedImages.length > 0}}">
+      <view class="bound-context-pill" wx:if="{{selectedContextLabel}}" bindtap="openRaceSelector">
+        <text class="bound-context-pill-label">比赛</text>
+        <text class="bound-context-pill-value">{{selectedContextLabel}}</text>
+      </view>
+
+      <block wx:for="{{selectedImages}}" wx:key="id">
+        <view class="selected-image-chip">
+          <image class="selected-image-thumb" src="{{item.path}}" mode="aspectFill"></image>
+          <view class="selected-image-remove" bindtap="removeSelectedImage" data-index="{{index}}">×</view>
+        </view>
+      </block>
+    </view>
+
+    <view class="composer-row">
+      <view class="quick-anchor">
+        <view class="plus-btn" bindtap="toggleQuickActions">
+          <text class="plus-btn-text">+</text>
+        </view>
+      </view>
+
+      <view class="composer-input-shell {{inputValue ? 'has-value' : ''}}">
+        <textarea
+          class="chat-input"
+          value="{{inputValue}}"
+          placeholder="问问训练、装备、补给或比赛计划..."
+          placeholder-class="input-placeholder"
+          auto-height="true"
+          adjust-position="{{false}}"
+          show-confirm-bar="{{false}}"
+          maxlength="1200"
+          bindinput="onInput"
+          bindfocus="onInputFocus"
+          bindblur="onInputBlur"
+          bindkeyboardheightchange="onKeyboardHeightChange"
+          confirm-type="send"
+          bindconfirm="sendMessage"
+          disabled="{{loading}}"
+        ></textarea>
+
+        <view class="send-fab loading" wx:if="{{loading || streaming}}">
+          <text class="send-fab-text">...</text>
+        </view>
+
+        <view class="send-fab" wx:if="{{inputValue && !loading && !streaming}}" bindtap="sendMessage">
+          <text class="send-fab-text">↑</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showQuickActions}}" class="quick-actions-sheet" catchtap="noop">
+    <view class="quick-actions-handle"></view>
+    <view class="quick-actions-sheet-header">
+      <text class="quick-actions-sheet-title">更多操作</text>
+      <text class="quick-actions-sheet-caption">选择比赛、上传图片，或调整当前聊天上下文</text>
+    </view>
+
+    <view class="quick-actions-context" wx:if="{{selectedContextLabel || selectedImages.length > 0}}">
+      <view class="bound-context-pill quick-sheet-context-pill" wx:if="{{selectedContextLabel}}" bindtap="openRaceSelector">
+        <text class="bound-context-pill-label">当前比赛</text>
+        <text class="bound-context-pill-value">{{selectedContextLabel}}</text>
+      </view>
+
+      <scroll-view wx:if="{{selectedImages.length > 0}}" class="quick-actions-image-strip" scroll-x enhanced show-scrollbar="{{false}}">
+        <view class="quick-actions-image-row">
+          <block wx:for="{{selectedImages}}" wx:key="id">
+            <view class="selected-image-chip quick-sheet-image-chip">
+              <image class="selected-image-thumb" src="{{item.path}}" mode="aspectFill"></image>
+              <view class="selected-image-remove" bindtap="removeSelectedImage" data-index="{{index}}">×</view>
+            </view>
+          </block>
+        </view>
+      </scroll-view>
+    </view>
+
+    <view class="quick-actions-sheet-list">
+      <view class="quick-sheet-item" bindtap="openRaceSelector">
+        <view class="quick-sheet-item-icon">赛</view>
+        <view class="quick-sheet-item-copy">
+          <text class="quick-sheet-item-title">选择比赛 / 组别</text>
+          <text class="quick-sheet-item-subtitle">{{selectedContextLabel || '未绑定时，默认按全部比赛摘要回答'}}</text>
+        </view>
+      </view>
+
+      <view class="quick-sheet-item" bindtap="chooseImageFromMenu">
+        <view class="quick-sheet-item-icon">图</view>
+        <view class="quick-sheet-item-copy">
+          <text class="quick-sheet-item-title">上传图片</text>
+          <text class="quick-sheet-item-subtitle">最多 3 张，作为问题附件预留</text>
+        </view>
+      </view>
+
+      <view class="quick-sheet-item subtle" wx:if="{{selectedContextLabel}}" bindtap="clearRaceContext">
+        <view class="quick-sheet-item-icon clear">清</view>
+        <view class="quick-sheet-item-copy">
+          <text class="quick-sheet-item-title">清除比赛绑定</text>
+          <text class="quick-sheet-item-subtitle">恢复成全局聊天视角</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showContextSheet}}" class="context-sheet" catchtap="noop">
+    <view class="context-sheet-header">
+      <view class="context-sheet-copy">
+        <text class="context-sheet-title">选择比赛与组别</text>
+        <text class="context-sheet-subtitle">锁定后，AI 会默认按这里的比赛资料回答</text>
+      </view>
+      <view class="context-sheet-confirm" bindtap="confirmContextSelection">完成</view>
+    </view>
+
+    <view class="context-sheet-section">
+      <text class="context-sheet-section-title">比赛</text>
+      <scroll-view class="context-sheet-race-list" scroll-y enhanced show-scrollbar="{{false}}">
+        <block wx:for="{{raceOptions}}" wx:key="id">
+          <view class="context-sheet-option {{selectedRaceIndex === index ? 'active' : ''}}" bindtap="selectRaceOption" data-index="{{index}}">
+            <text class="context-sheet-option-text">{{item.label}}</text>
+          </view>
+        </block>
+      </scroll-view>
+    </view>
+
+    <view class="context-sheet-section">
+      <text class="context-sheet-section-title">组别</text>
+      <view class="context-sheet-group-list">
+        <block wx:for="{{groupOptions}}" wx:key="value">
+          <view class="context-sheet-group-chip {{selectedGroupIndex === index ? 'active' : ''}}" bindtap="selectGroupOption" data-index="{{index}}">
+            <text class="context-sheet-group-chip-text">{{item.label}}</text>
+          </view>
+        </block>
+      </view>
+    </view>
+  </view>
+</view>

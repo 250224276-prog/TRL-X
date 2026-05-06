@@ -81,6 +81,7 @@ Page({
             ...p,
             pureRaceName: pureName,
             groupColor: this.getGroupColor(p.groupDist),
+            planDate: p.groupStartDate || p.raceDate || '',
             displayTime: p.targetHours ? `${p.targetHours}h ${p.targetMinutes}min` : '未制定计划',
             slideX: 0 
           };

@@ -1,10 +1,19 @@
 /* 全局基础 */
+page {
+  min-height: 100vh;
+  background-color: #000000;
+  color: #FFFFFF;
+  overflow-x: hidden;
+}
+
 .container {
+  width: 100%;
   min-height: 100vh;
   background-color: #000000;
   padding: 0 40rpx 100rpx 40rpx;
   box-sizing: border-box;
   color: #FFFFFF;
+  overflow: hidden;
 }
 
 .custom-nav {
@@ -103,6 +112,7 @@
 /* ========================================== */
 .list-section {
   width: 100%;
+  overflow: hidden;
 }
 .section-title {
   font-family: 'Hiragino Sans GB', sans-serif;
@@ -128,19 +138,25 @@
 }
 
 .device-list {
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 24rpx;
+  overflow: hidden;
 }
 
 .device-card {
+  width: 100%;
   background: rgba(255, 255, 255, 0.11);
   border-radius: 36rpx;
   padding: 30rpx 40rpx;
+  box-sizing: border-box;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 24rpx;
   transition: all 0.2s ease;
+  overflow: hidden;
 }
 .device-card:active {
   background: rgba(255, 255, 255, 0.15);
@@ -150,33 +166,39 @@
 .device-info {
   display: flex;
   align-items: center;
-  gap: 30rpx;
-}
-
-.device-icon {
-  width: 40rpx;
-  height: 50rpx;
-  border: 4rpx solid rgba(255, 255, 255, 0.8);
-  border-radius: 8rpx;
+  flex: 1;
+  min-width: 0;
 }
 
 .text-group {
   display: flex;
   flex-direction: column;
   gap: 8rpx;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .device-name {
+  display: block;
   font-family: 'Inter', sans-serif;
   font-size: 32rpx;
   font-weight: 700;
   color: #FFFFFF;
+  line-height: 1.28;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .device-signal {
+  display: block;
   font-size: 20rpx;
   color: rgba(255, 255, 255, 0.4);
   font-family: 'Inter', sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .device-mac {
@@ -189,7 +211,8 @@
 .action-group {
   display: flex;
   align-items: center;
-  gap: 30rpx;
+  gap: 24rpx;
+  flex-shrink: 0;
 }
 
 .signal-bars {
@@ -213,14 +236,29 @@
   color: #000000;
   font-size: 26rpx;
   font-weight: 600;
-  padding: 12rpx 30rpx;
+  width: 132rpx;
+  height: 84rpx;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 32rpx;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .connecting-indicator {
   font-size: 22rpx;
   color: rgba(255, 255, 255, 0.6);
-  padding: 12rpx 20rpx;
+  min-width: 132rpx;
+  height: 84rpx;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12rpx;
+  text-align: center;
+  flex-shrink: 0;
 }
 
 .device-card.connecting {

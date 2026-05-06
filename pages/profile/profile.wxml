@@ -17,7 +17,7 @@
     <view class="arrow-right"></view>
   </view>
 
-  <view class="admin-portal" bindtap="goToAdminPortal">
+  <view class="admin-portal" bindtap="goToAdminPortal" wx:if="{{isAdmin}}">
     <view class="admin-left">
       <view class="admin-icon">👑</view>
       <view class="admin-text-box">
@@ -29,6 +29,16 @@
   </view>
 
   <view class="menu-list">
+    <view class="menu-item ai-entry" bindtap="goToAiChat">
+      <view class="ai-entry-main">
+        <view class="ai-entry-mark">AI</view>
+        <view class="ai-entry-text">
+          <text class="menu-text">AI 跑山助手</text>
+          <text class="ai-entry-desc">赛事计划 / 装备建议 / 补给策略</text>
+        </view>
+      </view>
+      <view class="arrow-right-small"></view>
+    </view>
     <view class="menu-item">
       <text class="menu-text">我的设备</text>
       <view class="arrow-right-small"></view>

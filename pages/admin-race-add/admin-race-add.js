@@ -1,10 +1,34 @@
 const db = wx.cloud.database();
+const app = getApp();
+
+function ensureAdminAccess() {
+  if (app.globalData && app.globalData.isLoggedIn && app.globalData.isAdmin) {
+    return true;
+  }
+
+  wx.showModal({
+    title: '无权限访问',
+    content: '请先登录指定管理员账号',
+    showCancel: false,
+    success: () => {
+      const pages = getCurrentPages();
+      if (pages.length > 1) {
+        wx.navigateBack();
+      } else {
+        wx.switchTab({ url: '/pages/profile/profile' });
+      }
+    }
+  });
+  return false;
+}
 
 function createEmptyGroup() {
   return {
     dist: '',
+    oldDist: '',
     cutoffTime: '',
     cutoffDurationMins: 0,
+    groupStartDate: '',
     computedColor: '#FFFFFF',
     startTimes: [],
     detailMapPath: '',
@@ -36,6 +60,11 @@ function pad2(num) {
   return String(num).padStart(2, '0');
 }
 
+function formatIsoDate(year, month, day) {
+  if (![year, month, day].every(Number.isFinite)) return '';
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
 function formatCompactNumber(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return '';
@@ -52,9 +81,21 @@ function extractElevationMeters(raw = '') {
   return match ? Number(match[0]) : NaN;
 }
 
+function getTrackFileType(fileName = '') {
+  const lower = String(fileName || '').trim().toLowerCase();
+  if (lower.endsWith('.gpx')) return 'gpx';
+  if (lower.endsWith('.kml')) return 'kml';
+  return '';
+}
+
 function formatGroupDistanceLabel(value) {
   const text = formatCompactNumber(value);
   return text ? `${text}km` : '';
+}
+
+function normalizeGroupDistanceLabel(raw = '') {
+  const value = extractDistanceValue(raw);
+  return Number.isFinite(value) ? formatGroupDistanceLabel(value) : '';
 }
 
 function formatHeaderDistanceValue(value, fallback = '') {
@@ -209,24 +250,57 @@ function parseStartTimesText(rawText, raceDate = '') {
     throw new Error('发枪时间不能为空');
   }
 
-  let fallbackDate = null;
+  const firstLooseParsed = parseDateTimeToken(tokens[0], raceDate, null);
+  if (!firstLooseParsed) {
+    throw new Error('第 1 个发枪时间无法识别，请使用“4月11号07点00分”或“07点30分”这种格式');
+  }
+
+  const groupStartDate = formatIsoDate(firstLooseParsed.year, firstLooseParsed.month, firstLooseParsed.day) || raceDate || '';
+  const firstParsed = parseDateTimeToken(tokens[0], groupStartDate, null);
+  if (!firstParsed) {
+    throw new Error('第 1 个发枪时间无法识别，请检查发枪日期是否完整');
+  }
+
+  let fallbackDate = {
+    year: firstParsed.year,
+    month: firstParsed.month,
+    day: firstParsed.day
+  };
+  let previousAbsoluteMinutes = null;
+
   const parsedList = tokens.map((token, index) => {
-    const parsed = parseDateTimeToken(token, raceDate, fallbackDate);
+    const parsed = index === 0
+      ? { ...firstParsed }
+      : parseDateTimeToken(token, groupStartDate, fallbackDate);
+
     if (!parsed) {
       throw new Error(`第 ${index + 1} 个发枪时间无法识别，请使用“4月11号07点00分”或“07点30分”这种格式`);
     }
-    fallbackDate = {
-      year: parsed.year,
-      month: parsed.month,
-      day: parsed.day
+
+    let absoluteMinutes = parsed.absoluteMinutes;
+    while (Number.isFinite(previousAbsoluteMinutes) && absoluteMinutes < previousAbsoluteMinutes) {
+      absoluteMinutes += 24 * 60;
+    }
+
+    const normalized = {
+      ...parsed,
+      absoluteMinutes
     };
-    return parsed;
+
+    fallbackDate = {
+      year: normalized.year,
+      month: normalized.month,
+      day: normalized.day
+    };
+    previousAbsoluteMinutes = absoluteMinutes;
+    return normalized;
   });
 
   return {
     startTimes: parsedList.map(item => item.timeText),
     firstStartAbsoluteMinutes: parsedList[0].absoluteMinutes,
-    hasMultipleStartTimes: parsedList.length > 1
+    hasMultipleStartTimes: parsedList.length > 1,
+    groupStartDate
   };
 }
 
@@ -318,11 +392,12 @@ function inferGroupCutoffDuration(group = {}, raceDate = '', startTimes = []) {
 
 function serializeCheckpointTextFromGroup(group = {}, raceDate = '') {
   const checkpoints = Array.isArray(group.checkpoints) ? group.checkpoints : [];
-  const startTimes = inferStartTimesFromGroup(group, raceDate);
-  const startTimesText = formatStartTimesText(startTimes, raceDate);
-  const startParser = parseDateTimeToken(startTimes[0], raceDate);
+  const groupBaseDate = group.groupStartDate || raceDate;
+  const startTimes = inferStartTimesFromGroup(group, groupBaseDate);
+  const startTimesText = formatStartTimesText(startTimes, groupBaseDate);
+  const startParser = parseDateTimeToken(startTimes[0], groupBaseDate);
   const firstStartAbsoluteMinutes = startParser ? startParser.absoluteMinutes : 0;
-  const groupCutoff = inferGroupCutoffDuration(group, raceDate, startTimes);
+  const groupCutoff = inferGroupCutoffDuration(group, groupBaseDate, startTimes);
   const headerDistance = formatHeaderDistanceValue(extractDistanceValue(group.dist), group.dist);
 
   const lines = [
@@ -503,6 +578,7 @@ function parseCheckpointText(checkpointText, raceDate) {
   return {
     groupDistanceNumber,
     groupDistanceLabel: formatGroupDistanceLabel(groupDistanceNumber),
+    groupStartDate: startInfo.groupStartDate || raceDate || '',
     startTimes: startInfo.startTimes,
     firstStartAbsoluteMinutes: startInfo.firstStartAbsoluteMinutes,
     hasMultipleStartTimes: startInfo.hasMultipleStartTimes,
@@ -558,6 +634,7 @@ Page({
   data: {
     mode: 'create',
     currentRaceId: null,
+    oldRaceDate: '',
 
     raceName: '',
     raceDate: '',
@@ -570,6 +647,8 @@ Page({
   },
 
   onLoad(options) {
+    if (!ensureAdminAccess()) return;
+
     if (options.id) {
       this.setData({ mode: 'edit', currentRaceId: options.id });
       wx.setNavigationBarTitle({ title: '编辑赛事档案' });
@@ -596,24 +675,28 @@ Page({
       let loadedGroups = (race.groups || []).map(group => {
         const startTimes = inferStartTimesFromGroup(group, race.date || '');
         const checkpointText = String(
-          group.checkpointText || serializeCheckpointTextFromGroup(group, race.date || '')
+          group.checkpointText || serializeCheckpointTextFromGroup(group, group.groupStartDate || race.date || '')
         ).trim();
 
         return {
-          dist: group.dist || '',
+          dist: normalizeGroupDistanceLabel(group.dist || ''),
+          oldDist: normalizeGroupDistanceLabel(group.dist || ''),
           cutoffTime: group.cutoffTime || '',
           cutoffDurationMins: group.cutoffDurationMins || 0,
+          groupStartDate: group.groupStartDate || race.date || '',
           computedColor: this.getGroupColor(group.dist || ''),
           startTimes,
           detailMapPath: group.detailMapImg || '',
           gpxFilePath: group.gpxFileID || '',
-          gpxFileName: group.gpxFileID ? '已上传历史GPX (点击可重传)' : '',
+          gpxFileName: group.gpxFileID ? '已上传历史轨迹文件 (点击可重传)' : '',
           checkpointText,
           oldCheckpointText: checkpointText,
           oldMapFileId: group.detailMapImg || '',
           oldGpxFileId: group.gpxFileID || '',
           actualDist: group.actualDist || '',
           elevation: group.elevation || '',
+          hasGpxTrack: Boolean(group.hasGpxTrack || group.gpxFileID),
+          dataSource: group.dataSource || (group.gpxFileID ? 'trackFile' : 'checkpointText'),
           checkpoints: group.checkpoints || []
         };
       });
@@ -625,6 +708,7 @@ Page({
       this.setData({
         raceName: race.name || '',
         raceDate: race.date || '',
+        oldRaceDate: race.date || '',
         location: race.location || '',
         hasItra: Boolean(race.hasItra),
         coverImgPath: race.coverImg || '',
@@ -686,9 +770,10 @@ Page({
     const value = e.detail.value;
 
     if (field === 'dist') {
-      const color = this.getGroupColor(value);
+      const normalizedDist = normalizeGroupDistanceLabel(value);
+      const color = this.getGroupColor(normalizedDist);
       this.setData({
-        [`groups[${index}].dist`]: value,
+        [`groups[${index}].dist`]: normalizedDist,
         [`groups[${index}].computedColor`]: color
       });
       return;
@@ -713,8 +798,8 @@ Page({
       type: 'file',
       success: res => {
         const file = res.tempFiles[0];
-        if (!file.name.toLowerCase().endsWith('.gpx')) {
-          wx.showToast({ title: '格式错误，只能选 GPX 文件', icon: 'none', duration: 2000 });
+        if (!getTrackFileType(file.name)) {
+          wx.showToast({ title: '格式错误，只能选 GPX 或 KML 文件', icon: 'none', duration: 2000 });
           return;
         }
         this.setData({
@@ -729,6 +814,15 @@ Page({
     return path && (path.startsWith('wxfile://') || path.startsWith('http://tmp') || path.startsWith('file://'));
   },
 
+  isSavedFileReference(path) {
+    if (!path) return false;
+    if (path.startsWith('cloud://')) return true;
+    if (/^https?:\/\//i.test(path) && !path.startsWith('http://tmp') && !path.startsWith('https://tmp')) {
+      return true;
+    }
+    return false;
+  },
+
   uploadToCloud(localPath, folderName) {
     return new Promise((resolve, reject) => {
       if (!localPath) {
@@ -736,7 +830,12 @@ Page({
         return;
       }
 
-      if (!this.isTempFile(localPath) && localPath.startsWith('cloud://')) {
+      if (this.isSavedFileReference(localPath)) {
+        resolve(localPath);
+        return;
+      }
+
+      if (!this.isTempFile(localPath)) {
         resolve(localPath);
         return;
       }
@@ -754,10 +853,99 @@ Page({
     });
   },
 
+  uploadJsonPayloadToCloud(payload, folderName = 'admin-payloads') {
+    return new Promise((resolve, reject) => {
+      const fs = wx.getFileSystemManager();
+      const filePath = `${wx.env.USER_DATA_PATH}/race-admin-${Date.now()}-${Math.floor(Math.random() * 1000)}.json`;
+      const cloudPath = `${folderName}/${Date.now()}-${Math.floor(Math.random() * 1000)}.json`;
+      const json = JSON.stringify(payload);
+
+      fs.writeFile({
+        filePath,
+        data: json,
+        encoding: 'utf8',
+        success: () => {
+          wx.cloud.uploadFile({
+            cloudPath,
+            filePath,
+            success: (res) => {
+              try {
+                fs.unlinkSync(filePath);
+              } catch (err) {
+                console.warn('清理临时赛事数据失败', err);
+              }
+              resolve(res.fileID);
+            },
+            fail: (err) => {
+              try {
+                fs.unlinkSync(filePath);
+              } catch (unlinkErr) {
+                console.warn('清理临时赛事数据失败', unlinkErr);
+              }
+              reject(err);
+            }
+          });
+        },
+        fail: reject
+      });
+    });
+  },
+
+  isMetadataOnlyEdit(groups = []) {
+    if (this.data.mode !== 'edit') return false;
+    if (this.isTempFile(this.data.coverImgPath)) return false;
+
+    return groups.every(group => {
+      const currentDist = normalizeGroupDistanceLabel(group.dist || '');
+      const oldDist = normalizeGroupDistanceLabel(group.oldDist || group.dist || '');
+      const checkpointUnchanged = String(group.checkpointText || '').trim() === String(group.oldCheckpointText || '').trim();
+      const mapUnchanged = String(group.detailMapPath || '') === String(group.oldMapFileId || '');
+      const trackUnchanged = String(group.gpxFilePath || '') === String(group.oldGpxFileId || '');
+
+      return currentDist === oldDist && checkpointUnchanged && mapUnchanged && trackUnchanged;
+    });
+  },
+
+  buildMetadataOnlyUpdate(groups = []) {
+    const {
+      raceName,
+      raceDate,
+      oldRaceDate,
+      location,
+      hasItra,
+      coverImgPath
+    } = this.data;
+
+    const updateData = {
+      name: raceName,
+      location: location || '',
+      date: raceDate,
+      hasItra: Boolean(hasItra),
+      coverImg: coverImgPath,
+      tags: groups.map(group => {
+        const dist = normalizeGroupDistanceLabel(group.dist || '');
+        return {
+          dist,
+          color: this.getGroupColor(dist)
+        };
+      }).filter(tag => tag.dist),
+      updateTime: db.serverDate()
+    };
+
+    groups.forEach((group, index) => {
+      if (!group.groupStartDate || group.groupStartDate === oldRaceDate) {
+        updateData[`groups.${index}.groupStartDate`] = raceDate;
+      }
+    });
+
+    return updateData;
+  },
+
   async submitAndIgnite() {
     const {
       mode,
       currentRaceId,
+      oldRaceDate,
       raceName,
       raceDate,
       location,
@@ -777,6 +965,21 @@ Page({
     wx.showLoading({ title: mode === 'edit' ? '更新赛事档案...' : '构建赛事档案...', mask: true });
 
     try {
+      if (this.isMetadataOnlyEdit(groups)) {
+        await db.collection('races').doc(currentRaceId).update({
+          data: this.buildMetadataOnlyUpdate(groups)
+        });
+
+        wx.hideLoading();
+        wx.showModal({
+          title: '更新成功',
+          content: '赛事基础信息已保存。',
+          showCancel: false,
+          success: () => wx.navigateBack()
+        });
+        return;
+      }
+
       const coverFileID = await this.uploadToCloud(coverImgPath, 'race-covers');
       const dbGroups = [];
       const tags = [];
@@ -791,32 +994,70 @@ Page({
           continue;
         }
 
-        if (false && !group.gpxFilePath) {
-          throw new Error(`组别 #${i + 1} 还没有上传 GPX 轨迹`);
-        }
-
         if (!checkpointText) {
           throw new Error(`组别 #${i + 1} 还没有填写站点文本`);
         }
 
         wx.showLoading({ title: `处理组别 #${i + 1} 数据...`, mask: true });
 
-        const parsedConfig = parseCheckpointText(checkpointText, raceDate);
+        let parsedConfig;
+        try {
+          parsedConfig = parseCheckpointText(checkpointText, raceDate);
+        } catch (parseError) {
+          const canReuseLegacyGroup = mode === 'edit'
+            && raceDate !== oldRaceDate
+            && checkpointText === String(group.oldCheckpointText || '').trim()
+            && Array.isArray(group.checkpoints)
+            && group.checkpoints.length > 0;
+
+          if (!canReuseLegacyGroup) {
+            throw parseError;
+          }
+
+          const legacyDistLabel = normalizeGroupDistanceLabel(inputDist || group.dist);
+          if (!legacyDistLabel) {
+            throw parseError;
+          }
+
+          const legacyMapFileID = await this.uploadToCloud(group.detailMapPath, 'race-maps');
+          const legacyTrackFileID = group.gpxFilePath ? await this.uploadToCloud(group.gpxFilePath, 'gpx-tracks') : '';
+          const legacyHexColor = this.getGroupColor(legacyDistLabel);
+          const shouldMoveGroupDate = !group.groupStartDate || group.groupStartDate === oldRaceDate;
+
+          tags.push({ dist: legacyDistLabel, color: legacyHexColor });
+          dbGroups.push({
+            dist: legacyDistLabel,
+            cutoffTime: group.cutoffTime || '',
+            cutoffDurationMins: group.cutoffDurationMins || 0,
+            groupStartDate: shouldMoveGroupDate ? raceDate : group.groupStartDate,
+            themeColor: legacyHexColor,
+            startTimes: group.startTimes || inferStartTimesFromGroup(group, raceDate),
+            startTime: (group.startTimes && group.startTimes[0]) || group.startTime || '07:00',
+            startTime2: (group.startTimes && group.startTimes[1]) || group.startTime2 || null,
+            detailMapImg: legacyMapFileID,
+            gpxFileID: legacyTrackFileID,
+            checkpointText,
+            checkpoints: group.checkpoints,
+            hasGpxTrack: Boolean(legacyTrackFileID),
+            dataSource: group.dataSource || (legacyTrackFileID ? 'trackFile' : 'checkpointText'),
+            actualDist: group.actualDist || '',
+            elevation: group.elevation || ''
+          });
+          continue;
+        }
+
         const inputDistValue = extractDistanceValue(inputDist);
         if (Number.isFinite(inputDistValue) && Math.abs(inputDistValue - parsedConfig.groupDistanceNumber) > 0.2) {
           throw new Error(`组别 #${i + 1} 的距离输入与站点文本首行“组别距离”不一致`);
         }
 
-        const finalDistLabel = inputDist || parsedConfig.groupDistanceLabel;
+        const finalDistLabel = normalizeGroupDistanceLabel(inputDist || parsedConfig.groupDistanceLabel);
         if (!finalDistLabel) {
           throw new Error(`组别 #${i + 1} 缺少距离信息`);
         }
 
         const mapFileID = await this.uploadToCloud(group.detailMapPath, 'race-maps');
         const gpxFileID = group.gpxFilePath ? await this.uploadToCloud(group.gpxFilePath, 'gpx-tracks') : '';
-        if (false && !gpxFileID) {
-          throw new Error(`组别「${finalDistLabel}」的 GPX 上传失败`);
-        }
 
         const hexColor = this.getGroupColor(finalDistLabel);
         const hasGpxFile = Boolean(gpxFileID);
@@ -828,14 +1069,15 @@ Page({
         const displayActualDist = needsParse ? '轨迹解析中...' : (hasGpxFile ? (group.actualDist || textFallback.actualDist) : textFallback.actualDist);
         const displayElevation = needsParse ? '轨迹解析中...' : (hasGpxFile ? (group.elevation || textFallback.elevation) : textFallback.elevation);
         const displayCheckpoints = (!hasGpxFile || needsParse || !hasExistingCheckpoints) ? textFallback.checkpoints : group.checkpoints;
-        const dataSource = hasGpxFile ? 'gpx' : 'checkpointText';
+        const dataSource = hasGpxFile ? 'trackFile' : 'checkpointText';
         const targetGroupIndex = dbGroups.length;
 
         if (needsParse) {
           parseJobs.push({
             groupIndex: targetGroupIndex,
             fileID: gpxFileID,
-            manualCheckpoints: parsedConfig.checkpoints
+            manualCheckpoints: parsedConfig.checkpoints,
+            fallbackElevation: textFallback.elevation
           });
         }
 
@@ -845,6 +1087,7 @@ Page({
           dist: finalDistLabel,
           cutoffTime: parsedConfig.groupCutoffDurationText,
           cutoffDurationMins: parsedConfig.groupCutoffDurationMins,
+          groupStartDate: parsedConfig.groupStartDate || raceDate,
           themeColor: hexColor,
           startTimes: parsedConfig.startTimes,
           startTime: parsedConfig.startTimes[0] || '07:00',
@@ -872,17 +1115,28 @@ Page({
         hasItra: Boolean(hasItra),
         coverImg: coverFileID,
         tags,
-        groups: dbGroups,
-        updateTime: db.serverDate()
+        groups: dbGroups
       };
 
-      if (mode === 'create') {
-        finalData.createTime = db.serverDate();
-        const dbRes = await db.collection('races').add({ data: finalData });
-        targetRaceId = dbRes._id;
-      } else {
-        await db.collection('races').doc(targetRaceId).update({ data: finalData });
+      wx.showLoading({ title: '提交赛事数据...', mask: true });
+      const payloadFileID = await this.uploadJsonPayloadToCloud(finalData);
+      const saveRes = await wx.cloud.callFunction({
+        name: 'saveRaceAdmin',
+        data: {
+          mode,
+          raceId: targetRaceId,
+          payloadFileID
+        }
+      });
+
+      if (!saveRes || !saveRes.result || saveRes.result.success !== true) {
+        throw new Error(
+          (saveRes && saveRes.result && (saveRes.result.error || saveRes.result.msg))
+          || '赛事保存失败'
+        );
       }
+
+      targetRaceId = saveRes.result.raceId || targetRaceId;
 
       if (parseJobs.length > 0) {
         for (const job of parseJobs) {
@@ -893,7 +1147,8 @@ Page({
               raceDocId: targetRaceId,
               groupIndex: job.groupIndex,
               fileID: job.fileID,
-              manualCheckpoints: job.manualCheckpoints
+              manualCheckpoints: job.manualCheckpoints,
+              fallbackElevation: job.fallbackElevation
             }
           });
 
@@ -909,15 +1164,13 @@ Page({
       wx.hideLoading();
       const hasTextOnlyGroups = dbGroups.some(group => !group.gpxFileID);
       const successContent = parseJobs.length > 0
-        ? '轨迹和站点文本已经同步完成，计划页可直接生成。'
+        ? '轨迹和文本站点都已经同步完成，计划页可直接按新规则生成。'
         : (hasTextOnlyGroups
-          ? '赛事已保存。未上传 GPX 的组别会先用站点文本展示关键数据，但暂不能制定计划。'
+          ? '赛事已保存。未上传轨迹文件的组别会先用站点文本展示关键数据，但暂不能制定计划。'
           : '赛事基础信息已保存。');
+
       wx.showModal({
         title: mode === 'edit' ? '✅ 更新成功' : '🚀 赛事建档成功',
-        content: parseJobs.length > 0
-          ? '轨迹和文本站点都已经同步完成，计划页可直接按新规则生成。'
-          : '赛事基础信息已保存。',
         content: successContent,
         showCancel: false,
         success: () => wx.navigateBack()
@@ -925,9 +1178,13 @@ Page({
     } catch (error) {
       wx.hideLoading();
       console.error(error);
+      const rawMessage = error.message || '网络异常';
+      const displayMessage = /FUNCTION_NOT_FOUND|FunctionName parameter could not be found|saveRaceAdmin/i.test(rawMessage)
+        ? '完整保存需要先部署 saveRaceAdmin 云函数；如果只是改日期、名称、地点等基础信息，请重新进入页面后直接保存。'
+        : rawMessage;
       wx.showModal({
         title: '操作中断',
-        content: error.message || '网络异常',
+        content: displayMessage,
         showCancel: false
       });
     }

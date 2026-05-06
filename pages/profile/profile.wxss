@@ -97,6 +97,44 @@
   font-size: 30rpx;
   font-weight: 500;
 }
+
+.ai-entry {
+  padding: 34rpx 0;
+}
+
+.ai-entry-main {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.ai-entry-mark {
+  width: 68rpx;
+  height: 68rpx;
+  margin-right: 24rpx;
+  border-radius: 18rpx;
+  background: linear-gradient(145deg, #FF9811 0%, #F94747 100%);
+  color: #000000;
+  font-family: 'Inter', sans-serif;
+  font-size: 24rpx;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-entry-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+.ai-entry-desc {
+  font-family: 'PingFang SC', sans-serif;
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.42);
+}
 .arrow-right-small {
   width: 12rpx;
   height: 12rpx;

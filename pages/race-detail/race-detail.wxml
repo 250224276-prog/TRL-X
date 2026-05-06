@@ -41,6 +41,14 @@
     <text class="tab-item {{currentTab === 'plan' ? 'active' : ''}}" bindtap="switchTab" data-tab="plan">制定计划</text>
   </view>
 
+  <view class="ai-entry-card" bindtap="goToAiChat">
+    <view class="ai-entry-copy">
+      <text class="ai-entry-title">让 AI 分析当前组别</text>
+      <text class="ai-entry-subtitle">自动读取赛事、站点与轨迹解析数据</text>
+    </view>
+    <text class="ai-entry-arrow">进入</text>
+  </view>
+
   <view class="content-detail" wx:if="{{currentTab === 'detail'}}">
     <text class="section-title">关键数据</text>
     

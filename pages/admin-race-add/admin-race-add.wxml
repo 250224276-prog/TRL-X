@@ -6,7 +6,7 @@
         <text class="main-title">AST 控制台</text>
         <view class="history-btn" bindtap="goToRaceList" wx:if="{{mode === 'create'}}">历史赛事库</view>
       </view>
-      <text class="sub-title">GPX 轨迹 + 文本站点 的简化录入模式</text>
+      <text class="sub-title">GPX / KML 轨迹 + 文本站点 的简化录入模式</text>
     </view>
 
     <view class="section-header"><text>全局赛事档案</text></view>
@@ -83,11 +83,11 @@
             auto-height="true"
             maxlength="-1"
           ></textarea>
-          <text class="helper-text">前三行必须是：组别距离、发枪时间、关门时长。后面可选填“爬升：2580m”和“下降：2590m”，没有 GPX 时会先用于详情页关键数据。从站点行开始逐行填写站点；没有关门可写 `--`，换装点在行尾写 `-换装点`。</text>
+          <text class="helper-text">前三行必须是：组别距离、发枪时间、关门时长。后面可选填“爬升：2580m”和“下降：2590m”，没有轨迹文件时会先用于详情页关键数据。从站点行开始逐行填写站点；没有关门可写 `--`，换装点在行尾写 `-换装点`。</text>
         </view>
 
         <view class="gpx-box" bindtap="chooseGroupGpx" data-index="{{index}}">
-          <text class="gpx-txt {{item.gpxFilePath ? 'active' : ''}}">{{item.gpxFileName || '+ 可选：载入此组别的 GPX 轨迹文件'}}</text>
+          <text class="gpx-txt {{item.gpxFilePath ? 'active' : ''}}">{{item.gpxFileName || '+ 可选：载入此组别的 GPX / KML 轨迹文件'}}</text>
         </view>
       </view>
     </block>

@@ -10,6 +10,11 @@
         <view class="race-name">{{pureRaceName || raceName}}</view>
         <view class="plan-group-tag" wx:if="{{groupDist}}" style="color: {{groupColor}}; border-color: {{groupColor}};">{{groupDist}}</view>
       </view>
+      <view class="plan-top-actions">
+        <view class="plan-ai-entry" bindtap="openPlanAiSheet">
+          <text>AI微调</text>
+        </view>
+      </view>
     </view>
 
     <view class="sticky-and-list-wrapper">
@@ -274,7 +279,7 @@
           <view class="col-1">
             <text class="cp-name">{{item.cpNum}}</text>
             <text class="dp-tag" wx:if="{{item.isDropBag}}">换装点</text>
-            <text class="cutoff-text" wx:if="{{item.displayCutoffTime && item.displayCutoffTime !== '--:--'}}">{{item.displayCutoffTime}}关门</text>
+            <text class="cutoff-text {{item.isOvertime ? 'text-red' : ''}}" wx:if="{{item.displayCutoffTime && item.displayCutoffTime !== '--:--'}}">{{item.displayCutoffTime}}关门</text>
           </view>
 
           <view class="col-2" catchtap="preventTouchMove">
@@ -316,6 +321,83 @@
 
     </view> 
   </scroll-view>
+
+  <view class="plan-ai-mask" wx:if="{{showPlanAiSheet}}" bindtap="closePlanAiSheet" catchtouchmove="preventTouchMove"></view>
+  <view class="plan-ai-sheet" wx:if="{{showPlanAiSheet}}" catchtap="noop">
+    <view class="plan-ai-handle"></view>
+    <view class="plan-ai-header">
+      <view class="plan-ai-header-copy">
+        <text class="plan-ai-title">AI 微调计划</text>
+        <text class="plan-ai-subtitle">直接说身体状态、补给习惯或备忘需求，AI 会把可执行改动写进当前计划。</text>
+      </view>
+      <view class="plan-ai-close" bindtap="closePlanAiSheet">
+        <text>关闭</text>
+      </view>
+    </view>
+
+    <view class="plan-ai-context-card">
+      <text class="plan-ai-context-label">当前计划</text>
+      <text class="plan-ai-context-value">{{pureRaceName || raceName}}<text wx:if="{{groupDist}}"> · {{groupDist}}</text></text>
+      <text class="plan-ai-context-meta">发枪 {{startTime}} · 计划 {{targetHours}}h {{targetMinutes}}m · 平均休息 {{globalRestMins}}m</text>
+    </view>
+
+    <view class="plan-ai-examples" wx:if="{{!planAiMessages.length}}">
+      <block wx:for="{{planAiExamples}}" wx:key="*this">
+        <view class="plan-ai-example-chip" bindtap="usePlanAiExample" data-prompt="{{item}}">
+          <text>{{item}}</text>
+        </view>
+      </block>
+    </view>
+
+    <scroll-view class="plan-ai-scroll" scroll-y enhanced show-scrollbar="{{false}}" scroll-into-view="{{planAiScrollIntoView}}">
+      <view class="plan-ai-message-list">
+        <view class="plan-ai-empty" wx:if="{{!planAiMessages.length && !planAiLoading}}">
+          <text class="plan-ai-empty-title">让 AI 直接帮你微调计划</text>
+          <text class="plan-ai-empty-copy">{{planAiHint}}</text>
+        </view>
+
+        <block wx:for="{{planAiMessages}}" wx:key="id">
+          <view id="plan-ai-msg-{{item.id}}" class="plan-ai-row {{item.role === 'user' ? 'from-user' : 'from-ai'}}">
+            <view class="plan-ai-bubble {{item.role === 'user' ? 'plan-ai-bubble-user' : 'plan-ai-bubble-ai'}}">
+              <text class="plan-ai-message-text" selectable="true">{{item.content}}</text>
+            </view>
+          </view>
+        </block>
+
+        <view class="plan-ai-row from-ai" wx:if="{{planAiLoading}}">
+          <view class="plan-ai-bubble plan-ai-bubble-ai plan-ai-bubble-loading">
+            <text class="plan-ai-loading-text">正在微调当前计划</text>
+            <view class="plan-ai-loading-dots">
+              <view class="plan-ai-loading-dot dot-1"></view>
+              <view class="plan-ai-loading-dot dot-2"></view>
+              <view class="plan-ai-loading-dot dot-3"></view>
+            </view>
+          </view>
+        </view>
+
+        <view id="plan-ai-bottom"></view>
+      </view>
+    </scroll-view>
+
+    <view class="plan-ai-composer">
+      <textarea
+        class="plan-ai-input"
+        value="{{planAiInput}}"
+        placeholder="比如：我最近大腿受伤了，上坡能力保守一点"
+        placeholder-class="plan-ai-placeholder"
+        auto-height="true"
+        maxlength="300"
+        show-confirm-bar="{{false}}"
+        confirm-type="send"
+        cursor-spacing="20"
+        bindinput="onPlanAiInput"
+        bindconfirm="sendPlanAiMessage"
+      ></textarea>
+      <view class="plan-ai-send {{(!planAiInput || planAiLoading) ? 'disabled' : ''}}" bindtap="sendPlanAiMessage">
+        <text>发送</text>
+      </view>
+    </view>
+  </view>
 
   <view class="modal-mask" wx:if="{{showDetail}}" bindtap="closeDetail" catchtouchmove="preventTouchMove"></view>
   

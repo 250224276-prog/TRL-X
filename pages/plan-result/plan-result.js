@@ -11,6 +11,34 @@ const {
 const DEFAULT_CURVE_K = 1.07;
 const STRATEGY_K_DELTA = 0.14;
 const DEFAULT_STRATEGY_SLIDER = Math.max(0, Math.min(100, Math.round(50 - (((DEFAULT_CURVE_K - 1) / STRATEGY_K_DELTA) * 50))));
+const PLAN_AI_MODEL = 'deepseek-v4-pro';
+const PLAN_AI_MAX_CONTEXT_CHARS = 6000;
+
+const PLAN_AI_SYSTEM_PROMPT = [
+  '你是 TRL-X 的计划微调助手。',
+  '你的任务是结合当前计划参数、赛段信息和用户输入，直接给出结果，并在需要时返回可执行的计划改动。',
+  '你必须只输出 JSON，绝对不要输出 markdown、解释过程、代码块或多余前后缀。',
+  '输出格式固定为：{"reply":"给用户看的简短中文回复","actions":[...]}。',
+  'reply 必须结果优先、简洁直接，不超过 4 行，不展开你的分析过程。',
+  'actions 是一个数组；如果只回答不改计划，actions 返回空数组。',
+  '你只允许使用这些动作：',
+  '1. {"type":"set_effort","group":"terrain|base|physiology","field":"uphillSkill|downhillSkill|runHikeThreshold|altitudeThreshold|altitudePenalty|nightPenalty","enabled":true,"value":数字}',
+  '2. {"type":"set_strategy_k","value":数字}',
+  '3. {"type":"set_target_time","hours":整数,"minutes":整数}',
+  '4. {"type":"set_start_time","value":"HH:mm"}',
+  '5. {"type":"set_global_rest","value":整数}',
+  '6. {"type":"set_checkpoint_rest","checkpoint":"CP9|八道河|ALL_DROPBAGS","value":整数}',
+  '7. {"type":"set_checkpoint_move","checkpoint":"CP9|八道河","value":整数}',
+  '8. {"type":"set_checkpoint_memo","checkpoint":"CP9|八道河|ALL_DROPBAGS","mode":"append|replace","value":"备忘内容"}',
+  '9. {"type":"set_night_window","startHour":整数,"endHour":整数}',
+  '10. {"type":"set_nutrition_alert","value":"15m|20m|30m|关闭"}',
+  '如果用户说自己大腿受伤、上坡跑不快、爬坡能力下降，优先启用并调低 terrain.uphillSkill，通常设到 85-95。',
+  '如果用户提到下坡不稳、膝盖疼、怕冲击，优先启用并调低 terrain.downhillSkill。',
+  '如果用户要求“写备忘录”，优先使用 set_checkpoint_memo。',
+  '如果用户没有明确指定站点，但提到补给或换装提醒，可把 checkpoint 设为 ALL_DROPBAGS。',
+  '不要编造不存在的站点或字段；所有站点名称必须来自上下文。',
+  '如果信息不足，请在 reply 里简短说明，并返回尽可能少且稳妥的动作。'
+].join('\n');
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -151,10 +179,102 @@ function hexToRgba(hex = '#FFFFFF', alpha = 1) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+function parseClockMinutes(rawValue, fallback = null) {
+  const text = String(rawValue || '').trim();
+  if (!text) return fallback;
+
+  let match = text.match(/(\d{1,2}):(\d{2})/);
+  if (!match) {
+    match = text.match(/(\d{1,2})[点时：:](\d{1,2})/);
+  }
+  if (!match) return fallback;
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return fallback;
+  return (hour * 60) + minute;
+}
+
+function parseDurationTextToMinutes(rawValue) {
+  const text = String(rawValue || '').trim();
+  if (!text || /^--+$/.test(text)) return null;
+
+  let match = text.match(/^(\d+)\s*小时(?:\s*(\d+)\s*分钟)?$/);
+  if (match) {
+    const hours = Number(match[1]);
+    const minutes = match[2] ? Number(match[2]) : 0;
+    return (hours * 60) + minutes;
+  }
+
+  match = text.match(/^(\d+)\s*分钟$/);
+  if (match) {
+    return Number(match[1]);
+  }
+
+  return null;
+}
+
+function clampText(text, maxLength = PLAN_AI_MAX_CONTEXT_CHARS) {
+  return String(text || '').trim().slice(0, maxLength);
+}
+
+function createPlanAiMessage(role, content) {
+  return {
+    id: `${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+    role,
+    content: String(content || '').trim()
+  };
+}
+
+function formatPlanAiReply(content = '') {
+  return String(content || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function strategyKToSlider(value) {
+  const safeK = Number(value);
+  if (!Number.isFinite(safeK)) return DEFAULT_STRATEGY_SLIDER;
+  const normalized = (safeK - 1) / STRATEGY_K_DELTA;
+  return clamp(Math.round(50 - (normalized * 50)), 0, 100);
+}
+
+function extractJsonPayload(raw = '') {
+  const text = String(raw || '').trim();
+  if (!text) return null;
+  const cleanText = text
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+
+  const candidates = [cleanText];
+  const firstBrace = cleanText.indexOf('{');
+  const lastBrace = cleanText.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    candidates.push(cleanText.slice(firstBrace, lastBrace + 1));
+  }
+
+  for (let i = 0; i < candidates.length; i += 1) {
+    try {
+      return JSON.parse(candidates[i]);
+    } catch (error) {
+      continue;
+    }
+  }
+  return null;
+}
+
+function normalizeCheckpointTarget(value = '') {
+  return String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+}
+
 Page({
   data: {
     raceId: '',
     raceDate: '',
+    groupStartDate: '',
     groupDist: '',
 
     raceName: '加载中...',
@@ -202,7 +322,19 @@ Page({
     successModalTitle: '',
     
     hasUnsavedChanges: false,
-    showUnsavedModal: false
+    showUnsavedModal: false,
+
+    showPlanAiSheet: false,
+    planAiInput: '',
+    planAiLoading: false,
+    planAiMessages: [],
+    planAiScrollIntoView: '',
+    planAiHint: '你可以直接说：我最近大腿受伤了，上坡能力保守一点；或：帮我在 CP9 备忘录写上换袜子、补盐丸。',
+    planAiExamples: [
+      '我最近大腿受伤了，上坡能力保守一点',
+      '帮我给所有换装点写备忘：换袜子、补盐丸、补咖啡因',
+      '我夜里状态一般，夜间时段更保守一点'
+    ]
   },
 
   onShow() {
@@ -663,6 +795,416 @@ Page({
 
   closeDetail() { this.setData({ showDetail: false }); },
 
+  noop() {},
+
+  openPlanAiSheet() {
+    this.setData({
+      showPlanAiSheet: true,
+      planAiScrollIntoView: 'plan-ai-bottom'
+    });
+  },
+
+  closePlanAiSheet() {
+    this.setData({ showPlanAiSheet: false });
+  },
+
+  onPlanAiInput(e) {
+    this.setData({ planAiInput: e.detail.value || '' });
+  },
+
+  usePlanAiExample(e) {
+    const prompt = String(e.currentTarget.dataset.prompt || '').trim();
+    if (!prompt) return;
+    this.setData({ planAiInput: prompt });
+  },
+
+  buildPlanAiContextText() {
+    const effortConfig = normalizeEffortConfig(this.data.effortConfig);
+    const checkpoints = Array.isArray(this.data.checkpoints) ? this.data.checkpoints : [];
+    const formatDistance = (value) => {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return String(value || '0');
+      return (Math.round(num * 100) / 100).toFixed(num >= 10 ? 1 : 2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+    };
+
+    const lines = [
+      `赛事名称：${this.data.pureRaceName || this.data.raceName || '当前赛事'}`,
+      `当前组别：${this.data.groupDist || '未标记'}`,
+      `比赛日期：${this.data.groupStartDate || this.data.raceDate || '--'}`,
+      `当前发枪时间：${this.data.startTime || '--:--'}`,
+      `当前计划用时：${this.data.targetHours}小时${this.data.targetMinutes}分钟`,
+      `当前平均休息：${this.data.globalRestMins}分钟`,
+      `当前补给提醒：${this.data.nutritionVal || '关闭'}`,
+      `当前 K 值：${this.getStrategyKValue().toFixed(2)}`,
+      `上坡能力：${effortConfig.terrain.uphillSkillEnabled ? '开启' : '关闭'} ${effortConfig.terrain.uphillSkill}%`,
+      `下坡能力：${effortConfig.terrain.downhillSkillEnabled ? '开启' : '关闭'} ${effortConfig.terrain.downhillSkill}%`,
+      `跑走阈值：${effortConfig.base.runHikeThresholdEnabled ? '开启' : '关闭'} ${effortConfig.base.runHikeThreshold}%`,
+      `高海拔影响：${effortConfig.physiology.altitudePenaltyEnabled ? '开启' : '关闭'} 阈值${effortConfig.physiology.altitudeThreshold}m 惩罚${effortConfig.physiology.altitudePenalty}%`,
+      `夜间惩罚：${effortConfig.physiology.nightPenaltyEnabled ? '开启' : '关闭'} ${effortConfig.physiology.nightPenalty}% ${String(effortConfig.physiology.nightStartHour).padStart(2, '0')}:00-${String(effortConfig.physiology.nightEndHour).padStart(2, '0')}:00`,
+      '站点清单：'
+    ];
+
+    if (!checkpoints.length) {
+      lines.push('暂无站点数据。');
+    } else {
+      checkpoints.forEach((cp, index) => {
+        const memoText = String(cp.memo || '').replace(/\s+/g, ' ').trim();
+        const tags = [];
+        if (cp.isDropBag) tags.push('换装点');
+        if (memoText) tags.push(`备忘=${memoText.slice(0, 48)}`);
+        lines.push(
+          `${cp.cpNum || `CP${index}`}${cp.locName ? ` ${cp.locName}` : ''} | 累计${formatDistance(cp.accDist)}km | 分段${formatDistance(cp.segDist)}km | +${Math.round(Number(cp.segGain) || 0)} -${Math.round(Number(cp.segLoss) || 0)} | 移动${parseInt(cp.moveMins, 10) || 0}分 | 休息${parseInt(cp.rest, 10) || 0}分 | 关门${cp.displayCutoffTime || cp.cutoffTime || '--:--'}${tags.length ? ` | ${tags.join(' | ')}` : ''}`
+        );
+      });
+    }
+
+    return clampText(lines.join('\n'));
+  },
+
+  async requestPlanAi(messages = []) {
+    const validMessages = (Array.isArray(messages) ? messages : [])
+      .filter(item => item && item.role && item.content)
+      .slice(-8)
+      .map(item => ({
+        role: item.role,
+        content: String(item.content || '').trim()
+      }));
+
+    const res = await wx.cloud.callFunction({
+      name: 'deepseekChat',
+      data: {
+        model: PLAN_AI_MODEL,
+        systemPrompt: PLAN_AI_SYSTEM_PROMPT,
+        raceContextText: this.buildPlanAiContextText(),
+        messages: validMessages
+      }
+    });
+
+    const result = (res && res.result) || {};
+    if (!result.success) {
+      throw new Error(result.error || 'AI 暂时不可用，请稍后再试');
+    }
+    const reply = formatPlanAiReply(result.reply || '');
+    if (!reply) {
+      throw new Error('AI 这次没有返回有效内容');
+    }
+    return reply;
+  },
+
+  resolveCheckpointIndexes(target = '') {
+    const normalizedTarget = normalizeCheckpointTarget(target);
+    const checkpoints = Array.isArray(this.data.checkpoints) ? this.data.checkpoints : [];
+    if (!normalizedTarget) return [];
+
+    if (normalizedTarget === 'ALL_DROPBAGS') {
+      return checkpoints
+        .map((cp, index) => (cp && cp.isDropBag ? index : -1))
+        .filter(index => index >= 0);
+    }
+
+    const indexes = [];
+    checkpoints.forEach((cp, index) => {
+      const candidates = [
+        cp.cpNum,
+        cp.locName,
+        cp.name,
+        `${cp.cpNum || ''}${cp.locName || ''}`
+      ]
+        .map(item => normalizeCheckpointTarget(item))
+        .filter(Boolean);
+
+      if (candidates.some(item => item === normalizedTarget || item.includes(normalizedTarget) || normalizedTarget.includes(item))) {
+        indexes.push(index);
+      }
+    });
+
+    return Array.from(new Set(indexes));
+  },
+
+  applyPlanAiActions(actions = []) {
+    const validActions = Array.isArray(actions) ? actions : [];
+    if (!validActions.length) return Promise.resolve(0);
+
+    const nextEffortConfig = cloneEffortConfig(this.data.effortConfig);
+    const nextCheckpoints = (this.data.checkpoints || []).map(cp => ({ ...cp }));
+    const pendingMoveOverrides = [];
+    let nextPaceStrategySlider = this.data.paceStrategySlider;
+    let nextTargetHours = this.data.targetHours;
+    let nextTargetMinutes = this.data.targetMinutes;
+    let nextStartTime = this.data.startTime;
+    let nextGlobalRestMins = this.data.globalRestMins;
+    let nextRestIndex = this.data.restIndex;
+    let nextNutritionVal = this.data.nutritionVal;
+    let nextNutritionIndex = this.data.nutritionIndex;
+    let appliedCount = 0;
+    let needFatigueRefresh = false;
+    let needTimeRefresh = false;
+    let updateTotalsOnRefresh = false;
+
+    const markApplied = () => {
+      appliedCount += 1;
+    };
+
+    validActions.forEach((action) => {
+      if (!action || typeof action !== 'object') return;
+      const type = String(action.type || '').trim();
+
+      if (type === 'set_effort') {
+        const group = String(action.group || '').trim();
+        const field = String(action.field || '').trim();
+        const numericValue = Number(action.value);
+        const enabled = typeof action.enabled === 'boolean' ? action.enabled : true;
+        if (!Number.isFinite(numericValue)) return;
+
+        if (group === 'terrain' && field === 'uphillSkill') {
+          nextEffortConfig.terrain.uphillSkill = clamp(Math.round(numericValue), 80, 120);
+          nextEffortConfig.terrain.uphillSkillEnabled = enabled;
+          needFatigueRefresh = true;
+          markApplied();
+        } else if (group === 'terrain' && field === 'downhillSkill') {
+          nextEffortConfig.terrain.downhillSkill = clamp(Math.round(numericValue), 80, 120);
+          nextEffortConfig.terrain.downhillSkillEnabled = enabled;
+          needFatigueRefresh = true;
+          markApplied();
+        } else if (group === 'base' && field === 'runHikeThreshold') {
+          nextEffortConfig.base.runHikeThreshold = clamp(Math.round(numericValue), 5, 20);
+          nextEffortConfig.base.runHikeThresholdEnabled = enabled;
+          needFatigueRefresh = true;
+          markApplied();
+        } else if (group === 'physiology' && field === 'altitudeThreshold') {
+          nextEffortConfig.physiology.altitudeThreshold = clamp(Math.round(numericValue / 100) * 100, 1000, 3500);
+          nextEffortConfig.physiology.altitudeThresholdEnabled = enabled;
+          if (enabled) nextEffortConfig.physiology.altitudePenaltyEnabled = true;
+          needFatigueRefresh = true;
+          markApplied();
+        } else if (group === 'physiology' && field === 'altitudePenalty') {
+          nextEffortConfig.physiology.altitudePenalty = clamp(Math.round(numericValue), 0, 20);
+          nextEffortConfig.physiology.altitudePenaltyEnabled = enabled;
+          if (enabled) nextEffortConfig.physiology.altitudeThresholdEnabled = true;
+          needFatigueRefresh = true;
+          markApplied();
+        } else if (group === 'physiology' && field === 'nightPenalty') {
+          nextEffortConfig.physiology.nightPenalty = clamp(Math.round(numericValue), 0, 15);
+          nextEffortConfig.physiology.nightPenaltyEnabled = enabled;
+          needFatigueRefresh = true;
+          markApplied();
+        }
+        return;
+      }
+
+      if (type === 'set_strategy_k') {
+        const numericValue = Number(action.value);
+        if (!Number.isFinite(numericValue)) return;
+        nextPaceStrategySlider = strategyKToSlider(numericValue);
+        needFatigueRefresh = true;
+        markApplied();
+        return;
+      }
+
+      if (type === 'set_target_time') {
+        nextTargetHours = clamp(parseInt(action.hours, 10) || 0, 0, 100);
+        nextTargetMinutes = clamp(parseInt(action.minutes, 10) || 0, 0, 59);
+        needFatigueRefresh = true;
+        markApplied();
+        return;
+      }
+
+      if (type === 'set_start_time') {
+        const value = String(action.value || '').trim();
+        if (/^(?:[01]?\d|2[0-3]):[0-5]\d$/.test(value)) {
+          nextStartTime = value;
+          needTimeRefresh = true;
+          markApplied();
+        }
+        return;
+      }
+
+      if (type === 'set_global_rest') {
+        const restValue = clamp(parseInt(action.value, 10) || 0, 1, 30);
+        nextGlobalRestMins = restValue;
+        const matchedIndex = (this.data.restRange || []).indexOf(`${restValue}m`);
+        nextRestIndex = matchedIndex >= 0 ? matchedIndex : nextRestIndex;
+        nextCheckpoints.forEach((cp, index) => {
+          if (index > 0 && index < nextCheckpoints.length - 1 && !cp.isDropBag) {
+            cp.rest = restValue;
+          }
+        });
+        needFatigueRefresh = true;
+        markApplied();
+        return;
+      }
+
+      if (type === 'set_checkpoint_rest') {
+        const indexes = this.resolveCheckpointIndexes(action.checkpoint);
+        const restValue = clamp(parseInt(action.value, 10) || 0, 0, 180);
+        let changed = false;
+        indexes.forEach((index) => {
+          if (!nextCheckpoints[index] || index <= 0 || index >= nextCheckpoints.length - 1) return;
+          nextCheckpoints[index].rest = restValue;
+          changed = true;
+        });
+        if (changed) {
+          needTimeRefresh = true;
+          updateTotalsOnRefresh = true;
+          markApplied();
+        }
+        return;
+      }
+
+      if (type === 'set_checkpoint_move') {
+        const indexes = this.resolveCheckpointIndexes(action.checkpoint).filter(index => index > 0);
+        const moveValue = clamp(parseInt(action.value, 10) || 0, 0, 1440);
+        if (!indexes.length) return;
+        pendingMoveOverrides.push({ indexes, moveValue });
+        markApplied();
+        return;
+      }
+
+      if (type === 'set_checkpoint_memo') {
+        const indexes = this.resolveCheckpointIndexes(action.checkpoint);
+        const mode = String(action.mode || 'append').trim().toLowerCase();
+        const memoValue = String(action.value || '').trim();
+        if (!memoValue || !indexes.length) return;
+        indexes.forEach((index) => {
+          if (!nextCheckpoints[index]) return;
+          const currentMemo = String(nextCheckpoints[index].memo || '').trim();
+          nextCheckpoints[index].memo = mode === 'replace'
+            ? memoValue
+            : (currentMemo ? `${currentMemo}\n${memoValue}` : memoValue);
+        });
+        markApplied();
+        return;
+      }
+
+      if (type === 'set_night_window') {
+        nextEffortConfig.physiology.nightStartHour = clamp(parseInt(action.startHour, 10) || 0, 0, 23);
+        nextEffortConfig.physiology.nightEndHour = clamp(parseInt(action.endHour, 10) || 0, 0, 23);
+        needFatigueRefresh = true;
+        markApplied();
+        return;
+      }
+
+      if (type === 'set_nutrition_alert') {
+        let nextValue = String(action.value || '').trim();
+        if (/^\d+$/.test(nextValue)) nextValue = `${nextValue}m`;
+        const matchedIndex = (this.data.nutritionRange || []).indexOf(nextValue);
+        if (matchedIndex === -1) return;
+        nextNutritionVal = nextValue;
+        nextNutritionIndex = matchedIndex;
+        markApplied();
+      }
+    });
+
+    if (!appliedCount) return Promise.resolve(0);
+
+    const finalize = (resolve) => {
+      this.setUnsavedChanges(true);
+      resolve(appliedCount);
+    };
+
+    const applyMoveOverrides = (resolve) => {
+      if (!pendingMoveOverrides.length) {
+        finalize(resolve);
+        return;
+      }
+
+      const finalCheckpoints = (this.data.checkpoints || []).map(cp => ({ ...cp }));
+      let changed = false;
+      pendingMoveOverrides.forEach(({ indexes, moveValue }) => {
+        indexes.forEach((index) => {
+          if (!finalCheckpoints[index]) return;
+          finalCheckpoints[index].moveMins = moveValue;
+          changed = true;
+        });
+      });
+
+      if (!changed) {
+        finalize(resolve);
+        return;
+      }
+
+      this.setData({ checkpoints: finalCheckpoints }, () => {
+        this.updateTimesAndPaces(true, () => finalize(resolve));
+      });
+    };
+
+    const nextData = {
+      effortConfig: normalizeEffortConfig(nextEffortConfig),
+      checkpoints: nextCheckpoints,
+      paceStrategySlider: nextPaceStrategySlider,
+      targetHours: nextTargetHours,
+      targetMinutes: nextTargetMinutes,
+      timeIndex: [nextTargetHours, nextTargetMinutes],
+      startTime: nextStartTime,
+      globalRestMins: nextGlobalRestMins,
+      restIndex: nextRestIndex,
+      nutritionVal: nextNutritionVal,
+      nutritionIndex: nextNutritionIndex
+    };
+
+    return new Promise((resolve) => {
+      this.setData(nextData, () => {
+        if (needFatigueRefresh) {
+          this.runFatigueEngine(() => applyMoveOverrides(resolve));
+          return;
+        }
+
+        if (needTimeRefresh) {
+          this.updateTimesAndPaces(updateTotalsOnRefresh, () => applyMoveOverrides(resolve));
+          return;
+        }
+
+        if (pendingMoveOverrides.length) {
+          applyMoveOverrides(resolve);
+          return;
+        }
+
+        finalize(resolve);
+      });
+    });
+  },
+
+  async sendPlanAiMessage() {
+    if (this.data.planAiLoading) return;
+    const content = String(this.data.planAiInput || '').trim();
+    if (!content) return;
+
+    const userMessage = createPlanAiMessage('user', content);
+    const nextMessages = [...this.data.planAiMessages, userMessage];
+    this.setData({
+      planAiMessages: nextMessages,
+      planAiInput: '',
+      planAiLoading: true,
+      planAiScrollIntoView: 'plan-ai-bottom'
+    });
+
+    try {
+      const rawReply = await this.requestPlanAi(nextMessages);
+      const payload = extractJsonPayload(rawReply);
+      const replyText = formatPlanAiReply((payload && payload.reply) || rawReply || '已收到，这次没有自动改动当前计划。');
+      const actions = payload && Array.isArray(payload.actions) ? payload.actions : [];
+
+      await this.applyPlanAiActions(actions);
+
+      const assistantMessage = createPlanAiMessage('assistant', replyText);
+      this.setData({
+        planAiMessages: [...this.data.planAiMessages, assistantMessage],
+        planAiLoading: false,
+        planAiScrollIntoView: 'plan-ai-bottom'
+      });
+    } catch (error) {
+      const message = String(error && error.message ? error.message : 'AI 暂时不可用，请稍后再试。')
+        .replace(/^cloud\.callFunction:fail\s*/i, '')
+        .replace(/^Error:\s*/i, '');
+      const assistantMessage = createPlanAiMessage('assistant', `这次没有改动成功：${message}`);
+      this.setData({
+        planAiMessages: [...this.data.planAiMessages, assistantMessage],
+        planAiLoading: false,
+        planAiScrollIntoView: 'plan-ai-bottom'
+      });
+    }
+  },
+
   toggleDetailGradeMode() {
     this.setData({ detailGradeMode: !this.data.detailGradeMode }, () => {
       this.drawChartBase(null);
@@ -750,14 +1292,24 @@ Page({
     const maxE = Math.max(...elevations);
     const distRange = Math.max(0.01, maxD - minD);
     const elevRange = Math.max(1, maxE - minE);
+    const width = 100;
+    const height = 40;
+    const topPad = 3;
+    const bottomPad = 3;
+    const drawHeight = height - topPad - bottomPad;
+    // Use a fixed grade reference so gentle segments stay visually gentle and
+    // steep segments are still allowed to rise higher instead of every segment
+    // being stretched to the full card height.
+    const gradeReferenceRange = Math.max(120, distRange * 1000 * 0.065);
+    const visualRange = Math.max(elevRange * 1.06, gradeReferenceRange);
 
     const pointsStr = sampled.map(point => {
-      const x = ((Number(point.d) - minD) / distRange) * 100;
-      const y = 40 - (((Number(point.e) - minE) / elevRange) * 40);
+      const x = ((Number(point.d) - minD) / distRange) * width;
+      const y = (height - bottomPad) - (((Number(point.e) - minE) / visualRange) * drawHeight);
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' L');
 
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40" preserveAspectRatio="none"><defs><linearGradient id="elevationGradient" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#FF9849" stop-opacity="0.4" /><stop offset="100%" stop-color="#FF9849" stop-opacity="0.05" /></linearGradient></defs><path d="M${pointsStr} L100,40 L0,40 Z" fill="url(#elevationGradient)" stroke="none" /><path d="M${pointsStr}" fill="none" stroke="#FF9849" stroke-width="1.5" /></svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none"><defs><linearGradient id="elevationGradient" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#FF9849" stop-opacity="0.42" /><stop offset="100%" stop-color="#FF9849" stop-opacity="0.10" /></linearGradient></defs><path d="M${pointsStr} L${width},${height - bottomPad} L0,${height - bottomPad} Z" fill="url(#elevationGradient)" stroke="none" /><path d="M${pointsStr}" fill="none" stroke="#FF9849" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>`;
     return svgToDataUri(svg);
   },
 
@@ -1065,10 +1617,7 @@ Page({
         });
         ctx.lineTo(getX(lastPoint.d), height - padding.bottom);
         ctx.closePath();
-        const segmentGradient = ctx.createLinearGradient(0, padding.top, 0, height - padding.bottom);
-        segmentGradient.addColorStop(0, hexToRgba(color, 0.20));
-        segmentGradient.addColorStop(1, hexToRgba(color, 0.05));
-        ctx.fillStyle = segmentGradient;
+        ctx.fillStyle = hexToRgba(color, 0.24);
         ctx.fill();
 
         ctx.beginPath();
@@ -1256,6 +1805,7 @@ Page({
         this.setData({ 
           raceId: data.raceId || '',
           raceDate: data.raceDate || '',
+          groupStartDate: data.groupStartDate || data.raceDate || '',
           groupDist: data.groupDist || '',
           raceName: data.name || '越野赛', 
           pureRaceName: pureName,
@@ -1297,6 +1847,7 @@ Page({
             this.setData({
               raceId: planData.raceId || '',
               raceDate: planData.raceDate || '',
+              groupStartDate: planData.groupStartDate || planData.raceDate || '',
               groupDist: planData.groupDist || '',
               raceName: planData.raceName || '越野赛',
               pureRaceName: pureName,
@@ -1387,6 +1938,12 @@ Page({
       let segCutoffMins = null;
       let cutoffTime = cp.cutoffTime || '';
       let absoluteCutoffMinsPreset = Number.isFinite(cp.absoluteCutoffMinsPreset) ? cp.absoluteCutoffMinsPreset : null;
+      if (Number.isFinite(absoluteCutoffMinsPreset) && absoluteCutoffMinsPreset < 0) {
+        // Older bad records can carry a negative preset when the admin race date
+        // was set one day later than the text's explicit start date. Fall back
+        // to the preserved HH:mm cutoff string so the plan page can self-heal.
+        absoluteCutoffMinsPreset = null;
+      }
 
       if ((!explicitCpNum || !explicitLocName) && locName.includes('-')) {
         let parts = locName.split('-');
@@ -1416,7 +1973,7 @@ Page({
         endEle
       });
       const rawPoints = Array.isArray(cp.rawPoints) && cp.rawPoints.length > 1 ? cp.rawPoints : fallbackRawPoints;
-      const svgProfile = cp.svgProfile || this.buildInlineSvgProfile(rawPoints);
+      const svgProfile = this.buildInlineSvgProfile(rawPoints) || cp.svgProfile || '';
 
       return { 
         ...cp, 
@@ -1507,7 +2064,7 @@ Page({
     return this.distributeRoundedMinutes(weights, movingMins);
   },
 
-  runFatigueEngine() {
+  runFatigueEngine(afterUpdate) {
     const { targetHours, targetMinutes, checkpoints, K } = this.data;
     const targetMins = (parseInt(targetHours) || 0) * 60 + (parseInt(targetMinutes) || 0);
     let totalED = 0;
@@ -1555,7 +2112,7 @@ Page({
       cp.moveMins = finalMovePlan[index] || 0;
     });
     
-    this.setData({ checkpoints }, () => { this.updateTimesAndPaces(false); });
+    this.setData({ checkpoints }, () => { this.updateTimesAndPaces(false, afterUpdate); });
   },
 
   formatTime(minsTotal) {
@@ -1567,7 +2124,11 @@ Page({
     return `${hh}:${mm}${days > 0 ? ` (+${days})` : ''}`;
   },
 
-  getRaceDateParts(dateStr = this.data.raceDate) {
+  getPlanBaseDate(dateStr = '') {
+    return String(dateStr || this.data.groupStartDate || this.data.raceDate || '').trim();
+  },
+
+  getRaceDateParts(dateStr = this.data.groupStartDate || this.data.raceDate) {
     const nums = (dateStr || '').match(/\d+/g);
     if (!nums || nums.length < 3) return null;
     const year = Number(nums[0]);
@@ -1577,9 +2138,9 @@ Page({
     return { year, month, day };
   },
 
-  formatBeijingDateTime(absoluteMinutes, raceDate = this.data.raceDate) {
+  formatBeijingDateTime(absoluteMinutes, raceDate = this.data.groupStartDate || this.data.raceDate) {
     if (!Number.isFinite(absoluteMinutes)) return '';
-    const parts = this.getRaceDateParts(raceDate);
+    const parts = this.getRaceDateParts(this.getPlanBaseDate(raceDate));
     if (!parts) return '';
     const utcMsAtBeijingMidnight = Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0) - (8 * 60 * 60 * 1000);
     const utcMs = utcMsAtBeijingMidnight + (Math.round(absoluteMinutes) * 60 * 1000);
@@ -1601,18 +2162,20 @@ Page({
     return cpNum;
   },
 
-  getBleCutoffTimeBjt(cp, raceDate = this.data.raceDate) {
-    if (Number.isFinite(cp.absoluteCutoffMins)) return this.formatBeijingDateTime(cp.absoluteCutoffMins, raceDate);
+  getBleCutoffTimeBjt(cp, raceDate = this.data.groupStartDate || this.data.raceDate) {
+    const planBaseDate = this.getPlanBaseDate(raceDate);
+    if (Number.isFinite(cp.absoluteCutoffMins)) return this.formatBeijingDateTime(cp.absoluteCutoffMins, planBaseDate);
     if (!cp.cutoffTime || cp.cutoffTime === '--:--') return '';
     const [h, m] = cp.cutoffTime.split(':').map(Number);
     if (!Number.isFinite(h) || !Number.isFinite(m)) return '';
-    return this.formatBeijingDateTime((h * 60) + m, raceDate);
+    return this.formatBeijingDateTime((h * 60) + m, planBaseDate);
   },
 
   saveLocalPlanSnapshot(checkpoints = this.data.checkpoints) {
     const snapshot = {
       raceId: this.data.raceId || '',
       raceDate: this.data.raceDate || '',
+      groupStartDate: this.data.groupStartDate || this.data.raceDate || '',
       raceName: this.data.raceName || '',
       groupDist: this.data.groupDist || '',
       startTime: this.data.startTime || '07:00',
@@ -1637,19 +2200,21 @@ Page({
 
   buildBlePlanPayload(sourcePlan = null) {
     const plan = this.getBleSourcePlan(sourcePlan);
+    const planBaseDate = plan.groupStartDate || plan.raceDate || '';
     const segments = (Array.isArray(plan.checkpoints) ? plan.checkpoints : [])
       .slice(1)
       .map((cp, index) => ({
         segmentIndex: index + 1,
         segmentName: this.getBleSegmentName(cp, index),
-        arrivalTimeBjt: this.formatBeijingDateTime(cp.arrAbsoluteMins, plan.raceDate),
-        cutoffTimeBjt: this.getBleCutoffTimeBjt(cp, plan.raceDate),
+        arrivalTimeBjt: this.formatBeijingDateTime(cp.arrAbsoluteMins, planBaseDate),
+        cutoffTimeBjt: this.getBleCutoffTimeBjt(cp, planBaseDate),
         restMin: parseInt(cp.rest, 10) || 0
       }));
 
     const payload = {
       ver: 2,
       raceDate: plan.raceDate || '',
+      groupStartDate: planBaseDate,
       raceName: plan.raceName || '',
       nutritionAlert: plan.nutritionVal === '关闭' ? 0 : parseInt(plan.nutritionVal), 
       segmentCount: segments.length,
@@ -1660,17 +2225,24 @@ Page({
     return payload;
   },
 
-  updateTimesAndPaces(updateTotals = false) {
+  updateTimesAndPaces(updateTotals = false, afterUpdate) {
     let { checkpoints, startTime } = this.data;
-    let [startH, startM] = String(startTime || '07:00').split(':').map(Number);
-    let startMins = startH * 60 + startM;
+    const startMins = parseClockMinutes(startTime, 7 * 60);
+    const cutoffBaseTime = (Array.isArray(this.data.availableStartTimes) && this.data.availableStartTimes.length > 0)
+      ? this.data.availableStartTimes[0]
+      : startTime;
+    const cutoffBaseMins = parseClockMinutes(cutoffBaseTime, startMins);
     let currentMinutes = startMins;
     let totalMinsForGlobal = 0;
     
-    let lastCutoffMins = startMins; 
-    let runningCutoffMins = startMins;
+    let lastCutoffMins = cutoffBaseMins; 
+    let runningCutoffMins = cutoffBaseMins;
 
     const newCps = checkpoints.map((cp, i, arr) => {
+      const cutoffDurationMins = parseDurationTextToMinutes(cp.cutoffDurationText);
+      const durationBasedCutoffMins = Number.isFinite(cutoffDurationMins)
+        ? (cutoffBaseMins + cutoffDurationMins)
+        : null;
       if (i === 0) {
         cp.arrAbsoluteMins = currentMinutes;
         cp.depAbsoluteMins = currentMinutes;
@@ -1678,10 +2250,16 @@ Page({
         cp.depTime = this.formatTime(currentMinutes);
         cp.pace = "-'--\""; cp.eqPace = "-'--\""; cp.eqPaceShort = "-'--\""; cp.eqDist = "0.00";
         cp.isOvertime = false;
-        cp.absoluteCutoffMins = Number.isFinite(cp.absoluteCutoffMinsPreset) ? cp.absoluteCutoffMinsPreset : null;
+        cp.absoluteCutoffMins = Number.isFinite(durationBasedCutoffMins)
+          ? durationBasedCutoffMins
+          : (Number.isFinite(cp.absoluteCutoffMinsPreset) ? cp.absoluteCutoffMinsPreset : null);
         cp.displayCutoffTime = Number.isFinite(cp.absoluteCutoffMins)
           ? this.formatTime(cp.absoluteCutoffMins)
           : (cp.cutoffTime || '--:--');
+        if (Number.isFinite(cp.absoluteCutoffMins)) {
+          lastCutoffMins = cp.absoluteCutoffMins;
+          runningCutoffMins = cp.absoluteCutoffMins;
+        }
         return cp;
       }
 
@@ -1689,7 +2267,13 @@ Page({
       cp.arrAbsoluteMins = currentMinutes;
       cp.arrTime = this.formatTime(currentMinutes); 
       
-      if (Number.isFinite(cp.absoluteCutoffMinsPreset)) {
+      if (Number.isFinite(durationBasedCutoffMins)) {
+        cp.absoluteCutoffMins = durationBasedCutoffMins;
+        cp.displayCutoffTime = this.formatTime(cp.absoluteCutoffMins);
+        lastCutoffMins = cp.absoluteCutoffMins;
+        runningCutoffMins = cp.absoluteCutoffMins;
+      }
+      else if (Number.isFinite(cp.absoluteCutoffMinsPreset)) {
         cp.absoluteCutoffMins = cp.absoluteCutoffMinsPreset;
         cp.displayCutoffTime = this.formatTime(cp.absoluteCutoffMinsPreset);
         lastCutoffMins = cp.absoluteCutoffMinsPreset;
@@ -1702,13 +2286,15 @@ Page({
         lastCutoffMins = runningCutoffMins;
       } 
       else if (cp.cutoffTime && cp.cutoffTime !== '--:--') {
-        let [cH, cM] = cp.cutoffTime.split(':').map(Number);
-        let cMins = cH * 60 + cM;
-        while (cMins < lastCutoffMins) cMins += 24 * 60;
+        let cMins = parseClockMinutes(cp.cutoffTime, null);
+        const cutoffAnchor = Number.isFinite(lastCutoffMins) ? Math.max(lastCutoffMins, cutoffBaseMins) : cutoffBaseMins;
+        while (Number.isFinite(cMins) && cMins < cutoffAnchor) cMins += 24 * 60;
         cp.absoluteCutoffMins = cMins;
-        lastCutoffMins = cMins; 
-        runningCutoffMins = cMins; 
-        cp.displayCutoffTime = this.formatTime(cMins); 
+        if (Number.isFinite(cMins)) {
+          lastCutoffMins = cMins; 
+          runningCutoffMins = cMins; 
+        }
+        cp.displayCutoffTime = Number.isFinite(cMins) ? this.formatTime(cMins) : '--:--'; 
       } else {
         cp.absoluteCutoffMins = null;
         cp.displayCutoffTime = '--:--';
@@ -1745,35 +2331,42 @@ Page({
     Object.assign(updatePayload, this.buildPaceStrategyVisual(newCps));
     const localPlanSnapshot = this.saveLocalPlanSnapshot(newCps);
     updatePayload.blePlanPayload = this.buildBlePlanPayload(localPlanSnapshot);
-    this.setData(updatePayload);
+    this.setData(updatePayload, () => {
+      if (typeof afterUpdate === 'function') afterUpdate();
+    });
   },
 
   drawNativeElevationChart(ctx, cpData, chartX, chartY, chartW, chartH, globalMinE, globalMaxE) {
     const points = this.generateMockPoints(cpData);
     if (!points || points.length === 0) return;
 
-    let minD = points[0].d, maxD = points[points.length-1].d;
-    let minE = Math.min(...points.map(p => p.e));
-    let maxE = Math.max(...points.map(p => p.e));
+    const minD = points[0].d;
+    const maxD = points[points.length - 1].d;
+    const minE = Math.min(...points.map(p => p.e));
+    const maxE = Math.max(...points.map(p => p.e));
     const distRange = Math.max(0.01, maxD - minD);
-    const baseRange = Math.max(1, maxE - minE);
-    const elevPadding = Math.max(8, baseRange * 0.18);
-    minE = Math.max(0, minE - elevPadding);
-    maxE = maxE + elevPadding;
-    if (maxE <= minE) maxE = minE + 20;
+    const elevRange = Math.max(1, maxE - minE);
+    const topPad = Math.max(4, chartH * 0.08);
+    const bottomPad = Math.max(4, chartH * 0.08);
+    const drawHeight = Math.max(8, chartH - topPad - bottomPad);
+    // Keep the same visual rule as the on-page SVG thumbnails: use real
+    // distance with a fixed grade reference, instead of stretching each segment
+    // to its own full height.
+    const gradeReferenceRange = Math.max(120, distRange * 1000 * 0.065);
+    const visualRange = Math.max(elevRange * 1.06, gradeReferenceRange);
 
     const getX = (d) => chartX + ((d - minD) / distRange) * chartW;
-    const getY = (e) => chartY + chartH - ((e - minE) / (maxE - minE)) * chartH;
+    const getY = (e) => (chartY + chartH - bottomPad) - (((e - minE) / visualRange) * drawHeight);
 
     ctx.beginPath();
     ctx.moveTo(getX(points[0].d), getY(points[0].e));
     points.forEach(p => ctx.lineTo(getX(p.d), getY(p.e)));
-    ctx.lineTo(getX(points[points.length-1].d), chartY + chartH);
-    ctx.lineTo(getX(points[0].d), chartY + chartH);
+    ctx.lineTo(getX(points[points.length - 1].d), chartY + chartH - bottomPad);
+    ctx.lineTo(getX(points[0].d), chartY + chartH - bottomPad);
     
     const grd = ctx.createLinearGradient(0, chartY, 0, chartY + chartH);
-    grd.addColorStop(0, 'rgba(255, 170, 22, 0.4)');
-    grd.addColorStop(1, 'rgba(255, 170, 22, 0.0)');
+    grd.addColorStop(0, 'rgba(255, 170, 22, 0.42)');
+    grd.addColorStop(1, 'rgba(255, 170, 22, 0.10)');
     ctx.fillStyle = grd;
     ctx.fill();
 
@@ -1781,7 +2374,9 @@ Page({
     ctx.moveTo(getX(points[0].d), getY(points[0].e));
     points.forEach(p => ctx.lineTo(getX(p.d), getY(p.e)));
     ctx.strokeStyle = '#FFAA16';
-    ctx.lineWidth = 2; 
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
     ctx.stroke();
   },
 
@@ -1873,7 +2468,7 @@ Page({
         ctx.fillText(`计划用时: ${targetHours}h ${targetMinutes}m   |   发枪时间: ${startTime}`, 80, 260);
 
         // ✨ 让表头文字(340)向下更贴近白线(380)
-        let listHeaderCenterY = 340; 
+        let listHeaderCenterY = 366; 
         
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -2052,22 +2647,23 @@ Page({
     
     const localPlanSnapshot = this.saveLocalPlanSnapshot(this.data.checkpoints);
     const {
-      raceId, raceName, groupDist, raceDate,
+      raceId, raceName, groupDist, raceDate, groupStartDate,
       startTime, availableStartTimes, targetHours, targetMinutes,
       paceStrategySlider, effortConfig,
       nutritionVal, nutritionIndex, checkpoints
     } = localPlanSnapshot;
 
+    const planBaseDate = groupStartDate || raceDate || '';
     let raceDateMs = 0;
-    if (raceDate) {
-      const nums = raceDate.match(/\d+/g);
+    if (planBaseDate) {
+      const nums = planBaseDate.match(/\d+/g);
       if (nums && nums.length >= 3) {
         raceDateMs = new Date(nums[0], nums[1] - 1, nums[2]).getTime();
       }
     }
 
     const planData = {
-      raceId, raceName, groupDist, raceDate, raceDateMs,
+      raceId, raceName, groupDist, raceDate, groupStartDate: planBaseDate, raceDateMs,
       startTime, availableStartTimes, targetHours, targetMinutes,
       paceStrategySlider, effortConfig,
       nutritionVal, nutritionIndex,  
